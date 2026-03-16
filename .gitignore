@@ -1,0 +1,21 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+
+# Student data - do not commit
+transcript*.csv
+*_filled_pathway.csv
+*filled_pathway*.csv
+*.pdf
+*_cpr.html
+*_blank.png
+
+# OS
+.DS_Store
+Thumbs.db

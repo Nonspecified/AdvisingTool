@@ -1,0 +1,282 @@
+course_id,course_name,credits,prereq,notes,category,source_sheet
+BMBT4000,Intro. to Biomedical Eng.,,,,TechElective,IE
+CIVE4700,Engineering Economics,,,,TechElective,IE
+COMP4270,Computer Graphics I,,,,TechElective,IE
+COMP4500,Mobile Robotics I,,,,TechElective,IE
+COMP4600,Selected Topics,,,,TechElective,IE
+EECE4100,Directed Studies,,,,TechElective,IE
+EECE4240,Comp.Meth./Power Sys.Analysis,,,,TechElective,IE
+EECE4410,Introduction to Biosensors,,,,TechElective,IE
+EECE5240,Comp.Meth./Power Sys.Analysis,,,,TechElective,IE
+EECE5250,Power Distribution System,,,,TechElective,IE
+EECE5410,Introduction to Biosensors,,,,TechElective,IE
+ENGN4000,Community-based EngProject III,,,,TechElective,IE
+ENGN4019,Eng Capstone Design Proposal,,,,TechElective,IE
+ENGY4340,Nuclear Reactor Theory,,,,TechElective,IE
+MATH4030,Mathematical Analysis,,,,TechElective,IE
+MATH4070,Prob & Math Stat I,,,,TechElective,IE
+MATH4110,Complex Variables I,,,,TechElective,IE
+MATH4130,Number Theory,,,,TechElective,IE
+MATH4200,Math Problem Solving,,,,TechElective,IE
+MATH4210,Abstract Algebra I,,,,TechElective,IE
+MATH4260,Topology,,,,TechElective,IE
+MATH4270,Geometry,,,,TechElective,IE
+MATH4450,Part Differential Equat,,,,TechElective,IE
+MATH4480,Math of Signal Process,,,,TechElective,IE
+MATH4500,Mathematical Modeling,,,,TechElective,IE
+MATH4750,Senior Seminar II,,,,TechElective,IE
+MATH4760,Senior Seminar III,,,,TechElective,IE
+MATH4860,Prob & Math Stat II,,,,TechElective,IE
+MATH4900,Selected Topics,,,,TechElective,IE
+MATH4910,Directed Study in Algebra,,,,TechElective,IE
+MATH4940,Directed Study in Statistics,,,,TechElective,IE
+MATH4960,Mathematics Practicum,,,,TechElective,IE
+MATH5000,Discrete Structures,,,,TechElective,IE
+MATH5010,Real Analysis,,,,TechElective,IE
+MATH5030,Mathematical Analysis,,,,TechElective,IE
+MATH5070,Functional Analysis I,,,,TechElective,IE
+MATH5090,Probabilty & Math Stats,,,,TechElective,IE
+MATH5100,Comp & Calc in Classroom,,,,TechElective,IE
+MATH5110,Complex Variables I,,,,TechElective,IE
+MATH5130,Number Theory,,,,TechElective,IE
+MATH5190,Intro to Probability & Stat II,,,,TechElective,IE
+MATH5200,Math Problem Solving,,,,TechElective,IE
+MATH5210,Abstract Algebra I,,,,TechElective,IE
+MATH5230,Linear Algebra,,,,TechElective,IE
+MATH5260,Topology,,,,TechElective,IE
+MATH5270,Geometry,,,,TechElective,IE
+MATH5290,Differential Geometry,,,,TechElective,IE
+MATH5300,Applied Mathematics I,,,,TechElective,IE
+MATH5310,Applied Mathematics II,,,,TechElective,IE
+MATH5320,Advanced Geometry,,,,TechElective,IE
+MATH5350,History of Mathematics,,,,TechElective,IE
+MATH5430,Ordinary Diff Equations,,,,TechElective,IE
+MATH5450,Partial Diff Equations,,,,TechElective,IE
+MATH5480,Math Of Signal Process,,,,TechElective,IE
+MATH5500,Mathematical Modeling,,,,TechElective,IE
+MATH5510,Calculus of Variations,,,,TechElective,IE
+MATH5520,Wavelet Analysis,,,,TechElective,IE
+MATH5550,Applied Math for Life Scien.,,,,TechElective,IE
+MATH5580,Eval. For Beg. Teachers,,,,TechElective,IE
+MATH5630,Computational Mathematics,,,,TechElective,IE
+MATH5640,Applied Linear Algebra,,,,TechElective,IE
+MATH5650,Special Functions,,,,TechElective,IE
+MATH5660,Numerical Analysis,,,,TechElective,IE
+MATH5680,Approximation Theory,,,,TechElective,IE
+MATH5700,Probability & Statistics,,,,TechElective,IE
+MATH5720,Optimization,,,,TechElective,IE
+MATH5750,Applied Statistics with R,,,,TechElective,IE
+MATH5760,Stat Prog using SAS,,,,TechElective,IE
+MATH5780,Stat Inference & Data Mining,,,,TechElective,IE
+MATH5820,Time Series,,,,TechElective,IE
+MATH5840,Stochastic Process,,,,TechElective,IE
+MATH5870,Measure and Probability Theory,,,,TechElective,IE
+MATH5880,Math Statistics,,,,TechElective,IE
+MATH5900,Stat Quality Control,,,,TechElective,IE
+MATH5910,Lin Stat Modlng & Regres,,,,TechElective,IE
+MATH5920,Multivariate Statistics,,,,TechElective,IE
+MATH5930,Experimental Design,,,,TechElective,IE
+MECH4000,Mechanical Eng Project III,,,,TechElective,IE
+MECH4040,Adv Mech Dynamic Meas Sys,,,,TechElective,IE
+MECH4260,Green Energy Engineering,,,,TechElective,IE
+MECH4280,Fund.of Eng. (ME) Review,,,,TechElective,IE
+MECH4460,Computational Thermal Fluids,,,,TechElective,IE
+MECH4500,Nanoscale Transport Phenomena,,,,TechElective,IE
+MECH4530,Mechatronics,,,,TechElective,IE
+MECH4570,Vibrations,,,,TechElective,IE
+MECH4830,Aerodynamics & Flight Mech,,,,TechElective,IE
+MECH4860,Ocean Engineering,,,,TechElective,IE
+MECH4910,Industrial Experience (permission required),,,,TechElective,IE
+MECH4991,Directed Studies in ME,,,,TechElective,IE
+MECH5040,Energy Eng Workshop,,,,TechElective,IE
+MECH5050,Directed Studies - ME,,,,TechElective,IE
+MECH5120,Applied Finite Elem. Analysis,,,,TechElective,IE
+MECH5130,Theory of Finite Elem Analysis,,,,TechElective,IE
+MECH5140,FEA of Composites,,,,TechElective,IE
+MECH5150,Struct.Dynam.Mod.Techniques,,,,TechElective,IE
+MECH5180,Signal Proc Techniques,,,,TechElective,IE
+MECH5190,Engineering Spectral Analysis,,,,TechElective,IE
+MECH5200,Numerical Meth/Part Diff Equat,,,,TechElective,IE
+MECH5210,Solar Fundamentals,,,,TechElective,IE
+MECH5220,Wind Energy Fundamentals,,,,TechElective,IE
+MECH5230,Structural Health Monitoring,,,,TechElective,IE
+MECH5240,Fund of Acoustics,,,,TechElective,IE
+MECH5250,Grid-Conn.Solar Elec. Sys.,,,,TechElective,IE
+MECH5260,Transport Proc.in Energy Sys.,,,,TechElective,IE
+MECH5270,Solar Energy Engineering,,,,TechElective,IE
+MECH5280,Photovoltaics Manufacturing,,,,TechElective,IE
+MECH5285,Energy Policy and Energy Codes,,,,TechElective,IE
+MECH5290,Fuel Cell Fundamentals,,,,TechElective,IE
+MECH5300,Autonomous Robotic Systems,,,,TechElective,IE
+MECH5320,Off-Grid Solar Electric System,,,,TechElective,IE
+MECH5340,Green Combustion and Biofuels,,,,TechElective,IE
+MECH5350,Fund. of Sustainable Energy,,,,TechElective,IE
+MECH5420,Convective Heat/mass Tr,,,,TechElective,IE
+MECH5450,Adv Indust Heat & MassTransfer,,,,TechElective,IE
+MECH5490,Cooling/Electronic Equipment,,,,TechElective,IE
+MECH5500,Vibrations,,,,TechElective,IE
+MECH5530,MEMS & Microsystems,,,,TechElective,IE
+MECH5540,Dynamic Sys & Controls,,,,TechElective,IE
+MECH5580,Aero/Wind Eng,,,,TechElective,IE
+MECH5590,Multi-Scale Comp. Fluid Dyn. I,,,,TechElective,IE
+MECH5620,Solid Mechanics I,,,,TechElective,IE
+MECH5710,Quality Engineering,,,,TechElective,IE
+MECH5740,Design For Reliabil Eng,,,,TechElective,IE
+MECH5750,Industrial Des of Exper,,,,TechElective,IE
+MECH5760,Engineering Proj Mngmnt,,,,TechElective,IE
+MECH5790,Robotics,,,,TechElective,IE
+MECH5810,Adv Fluid Mechanics,,,,TechElective,IE
+MECH5830,Advanced Aerodynamics,,,,TechElective,IE
+MECH5840,Ocean Engineering,,,,TechElective,IE
+MECH5910,Mech Behavior of Materials,,,,TechElective,IE
+MECH5930,Graduate Co-op Education,,,,TechElective,IE
+MECH5960,Mech of Composite Materials,,,,TechElective,IE
+MECH5970,Processing of Composites,,,,TechElective,IE
+MECH5980,Experimental Charact. of Comp.,,,,TechElective,IE
+PHYS4010,Radiation Safety & Control I,,,,TechElective,IE
+PHYS4020L,Radiation Safety & Control II,,,,TechElective,IE
+PHYS4060,Nuclear Instrumentation,,,,TechElective,IE
+PHYS4090,Nuclear Instrumentation,,,,TechElective,IE
+PHYS4110,Physics Perspectives,,,,TechElective,IE
+PHYS4110L,Sr Research In Rad Sci,,,,TechElective,IE
+PHYS4130,Mechanics,,,,TechElective,IE
+PHYS4170,Space Science Mission Design,,,,TechElective,IE
+PHYS4210,Statistical Thermodynamics,,,,TechElective,IE
+PHYS4240,Environmental Health Physics,,,,TechElective,IE
+PHYS4350,Intro Quantum Mechanics I,,,,TechElective,IE
+PHYS4360,Intro Quantum Mechanics II,,,,TechElective,IE
+PHYS4390,Electro-Optics,,,,TechElective,IE
+PHYS4400,Image Processing,,,,TechElective,IE
+PHYS4410,Radiochemistry,,,,TechElective,IE
+PHYS4450L,Characterization of Materials,,,,TechElective,IE
+PHYS4470,Laser Physics & Applications,,,,TechElective,IE
+PHYS4530L,Health Physics Capstone,,,,TechElective,IE
+PHYS4531L,Optics Project,,,,TechElective,IE
+PHYS4540,Physics Capstone,,,,TechElective,IE
+PHYS4560,Radiative Proc in Astrophysics,,,,TechElective,IE
+PHYS4610,Nuclear Physics I,,,,TechElective,IE
+PHYS4620,Radiation Biology,,,,TechElective,IE
+PHYS4630,Computational Methods Physics,,,,TechElective,IE
+PHYS4640,Particle Astrophysics,,,,TechElective,IE
+PHYS4650,Physics of Radiation Oncology,,,,TechElective,IE
+PHYS4670L,Automation Techniques,,,,TechElective,IE
+PHYS4690,Plasma Physics,,,,TechElective,IE
+PHYS4720,Solid State Physics,,,,TechElective,IE
+PHYS4770,SS Elec & Optoelec Devices,,,,TechElective,IE
+PHYS4780,Integ Optics: WG & Lasers,,,,TechElective,IE
+PHYS4810,Math Methods of Rad Sci,,,,TechElective,IE
+PHYS4820,Num Methods of Rad Sci,,,,TechElective,IE
+PHYS4950L,Spec Research Problems I,,,,TechElective,IE
+PHYS4960L,Spec Research Prob II,,,,TechElective,IE
+PHYS4970L,Senior Thesis in Physics,,,,TechElective,IE
+PHYS5010,"Energy, Force & Motion",,,,TechElective,IE
+PHYS5130,Mechanics,,,,TechElective,IE
+PHYS5170,Space Science Mission Design,,,,TechElective,IE
+PHYS5210,Statistical Thermodynamics,,,,TechElective,IE
+PHYS5350,Intro Quantum Mechanics I,,,,TechElective,IE
+PHYS5360,Intro Quantum Mechanics II,,,,TechElective,IE
+PHYS5380,Physical Optics & Waves,,,,TechElective,IE
+PHYS5390,Electro-Optics,,,,TechElective,IE
+PHYS5400,Image Processing,,,,TechElective,IE
+PHYS5450L,Characterization of Materials,,,,TechElective,IE
+PHYS5470,Laser Physics & Applications,,,,TechElective,IE
+PHYS5520,Contemporary Physics,,,,TechElective,IE
+PHYS5530,Electromagnetism I,,,,TechElective,IE
+PHYS5540,Electromagnetism II,,,,TechElective,IE
+PHYS5550,Introduction to Space Physics,,,,TechElective,IE
+PHYS5560,Radiative Proc in Astrophysics,,,,TechElective,IE
+PHYS5610,Nuclear Physics I,,,,TechElective,IE
+PHYS5630,Computational Methods in Phys.,,,,TechElective,IE
+PHYS5640,Particle Astrophysics,,,,TechElective,IE
+PHYS5670L,Automation Techniques,,,,TechElective,IE
+PHYS5690,Plasma Physics,,,,TechElective,IE
+PHYS5720,Solid State Physics,,,,TechElective,IE
+PHYS5770,SS Elec & Optoelec Devices,,,,TechElective,IE
+PHYS5780,Integ Optics: WG & Lasers,,,,TechElective,IE
+PHYS5830,Astronomy and Astrophysics I,,,,TechElective,IE
+PHYS5870,Cloud Physics,,,,TechElective,IE
+PHYS5930L,Graduate Physics Lab,,,,TechElective,IE
+PLAS4030,Mech Behavior of Polymers,,,,TechElective,IE
+PLAS4040,Process Control,,,,TechElective,IE
+PLAS4060,"Polymer Struct, Prop and Appl",,,,TechElective,IE
+PLAS4090,Senior Research Plastics I,,,,TechElective,IE
+PLAS4100,Coop Assessment II,,,,TechElective,IE
+PLAS4150,Capstone Project I,,,,TechElective,IE
+PLAS4160,Capstone Project II,,,,TechElective,IE
+PLAS4170,Honors Capstone Project II,,,,TechElective,IE
+PLAS4180,Product & Process Design,,,,TechElective,IE
+PLAS4200,Co-op Assessment 2 (6 months),,,,TechElective,IE
+PLAS4500,Nanoscale Transport Phenomena,,,,TechElective,IE
+PLAS5000,Adv Proj In Plastics I,,,,TechElective,IE
+PLAS5010,Adv Proj In Plastics II,,,,TechElective,IE
+PLAS5030,Mech Behavior of Polymers,,,,TechElective,IE
+PLAS5060,Poly Struc Properties & Applic,,,,TechElective,IE
+PLAS5090,Plastics Processing Theory I,,,,TechElective,IE
+PLAS5100,Plastics Processing Theory II,,,,TechElective,IE
+PLAS5110,Polymer Blends,,,,TechElective,IE
+PLAS5120,Porous Polymers,,,,TechElective,IE
+PLAS5130,New Plastics Materials,,,,TechElective,IE
+PLAS5140,Statistics for Six Sigma,,,,TechElective,IE
+PLAS5150,Lean Plastics Manufacturing,,,,TechElective,IE
+PLAS5180,Plastics Product Design,,,,TechElective,IE
+PLAS5220,Adv Proj in Plastics IV,,,,TechElective,IE
+PLAS5240,"Proc Analysis, Instrum & Contr",,,,TechElective,IE
+PLAS5250,Syn Fibers:Proc.-Stru.-Prop.,,,,TechElective,IE
+PLAS5280,Pl Information Data Bases,,,,TechElective,IE
+PLAS5300,Selected Topics,,,,TechElective,IE
+PLAS5320,Adhesives & Adhesion,,,,TechElective,IE
+PLAS5330,Coatings Science & Tech I,,,,TechElective,IE
+PLAS5340,Coatings Science & Tech. II,,,,TechElective,IE
+PLAS5350,Rubber Technology,,,,TechElective,IE
+PLAS5360,Rheology of Polymers,,,,TechElective,IE
+PLAS5370,Business Law for Engineers,,,,TechElective,IE
+PLAS5400,Commercial Develop of Plastics,,,,TechElective,IE
+PLAS5410,Computer App in Plastics,,,,TechElective,IE
+PLAS5420,Colloidal Nanosci & Nano Eng,,,,TechElective,IE
+PLAS5440,Advanced Plastics Materials,,,,TechElective,IE
+PLAS5450,Additives for Polymer Material,,,,TechElective,IE
+PLAS5470,Mat.for Renewable Energy & Sus,,,,TechElective,IE
+PLAS5480,Analytical and Numerical Meth,,,,TechElective,IE
+PLAS5490,Product Design for Elastomers,,,,TechElective,IE
+PLAS5500,Processing with Elastomers,,,,TechElective,IE
+PLAS5510,Extrusion Die Design,,,,TechElective,IE
+PLAS5520,Machine Design,,,,TechElective,IE
+PLAS5530,Medical Device Design I,,,,TechElective,IE
+PLAS5540,Medical Device Design II,,,,TechElective,IE
+PLAS5630,Curr Top/ Plastics Materials I,,,,TechElective,IE
+PLAS5640,Curr Top/Plastics Materials II,,,,TechElective,IE
+PLAS5650,Thermosets,,,,TechElective,IE
+PLAS5660,Poly Mat'l Sys Solution,,,,TechElective,IE
+PLAS5680,Dynamic Mech Prop II,,,,TechElective,IE
+PLAS5690,Curr Top/Plastics Design I,,,,TechElective,IE
+PLAS5700,Curr Top/Plastics Processing I,,,,TechElective,IE
+PLAS5710,Plastics Processing Eng Lab I,,,,TechElective,IE
+PLAS5720,Adv. Plastics Proc Eng Lab,,,,TechElective,IE
+PLAS5740,Advance Physical Prop. Lab,,,,TechElective,IE
+PLAS5750,Biomaterials I,,,,TechElective,IE
+PLAS5760,Advanced Mold Design,,,,TechElective,IE
+PLAS5770,Plastics Process Engineering I,,,,TechElective,IE
+PLAS5780,Advanced Plastics Processing,,,,TechElective,IE
+PLAS5790,Prob In Biomat/Directed Study,,,,TechElective,IE
+PLAS5820,Curr Top/Plastics Design II,,,,TechElective,IE
+PLAS5830,Adv Res Methodology,,,,TechElective,IE
+PLAS5850,Computer Aided Engineering I,,,,TechElective,IE
+PLAS5890,Polymer Nanocomposites,,,,TechElective,IE
+PLAS5900,Survey of Intellectual Prop,,,,TechElective,IE
+PLAS5910,Industrial Thesis Develop I,,,,TechElective,IE
+PLAS5930,Cooperative Education,,,,TechElective,IE
+PLAS5950,Thermoplastic Elastomers,,,,TechElective,IE
+PLAS5960,"Plastics,Elastomers& Additives",,,,TechElective,IE
+PLAS5970,Plastics & Environment,,,,TechElective,IE
+PLAS6010,Grad Industrial Coop Educ I,,,,TechElective,IE
+PLAS6020,Med. Device Dev. Regulation,,,,TechElective,IE
+PLAS6060,Platics Manufacturing Sys Eng,,,,TechElective,IE
+PLAS6070,Supply Chain Mgmt.for Engineer,,,,TechElective,IE
+PLAS6100,Plastics Industry Development,,,,TechElective,IE
+PLAS6110,Coloration of Eng.Thermo.,,,,TechElective,IE
+PLAS6180,Structural Product Design,,,,TechElective,IE
+PLAS6420,Char.of Polymers & Plastics,,,,TechElective,IE
+PLAS6500,Nan.Trans.Phen.for.Man.Nano.,,,,TechElective,IE
+PLAS6750,Biomaterials II,,,,TechElective,IE
+PLAS6780,New Dev. in Polymer Man.,,,,TechElective,IE
+PLAS6820,Physical Polymer Science,,,,TechElective,IE

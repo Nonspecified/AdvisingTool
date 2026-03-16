@@ -1,0 +1,27 @@
+major,rule_type,value,effect,applies_to_bucket,priority,notes,effective_from,effective_to,source
+ME,prefix,MTEC,ban,TechElective,100,No MTEC courses,2025-10-14,,advisor
+ME,prefix,ETEC,ban,TechElective,100,No ETEC courses,2025-10-14,,advisor
+ME,course_id,MATH 3630,ban,TechElective,90,Department exclusion list,2025-10-14,,advisor
+ME,course_id,MATH 4100,ban,TechElective,90,Department exclusion list,2025-10-14,,advisor
+ME,course_id,MATH 4190,ban,TechElective,90,Department exclusion list,2025-10-14,,advisor
+ME,course_id,MATH 4350,ban,TechElective,90,Department exclusion list,2025-10-14,,advisor
+ME,course_id,MATH 4660,ban,TechElective,90,Department exclusion list,2025-10-14,,advisor
+ME,course_id,BMEN 4390,ban,TechElective,90,Department exclusion list,2025-10-14,,advisor
+ME,course_id,BMEN 5390,ban,TechElective,90,Department exclusion list,2025-10-14,,advisor
+IE,prefix,MTEC,ban,TechElective,100,No MTEC courses,2025-10-14,,advisor
+IE,prefix,ETEC,ban,TechElective,100,No ETEC courses,2025-10-14,,advisor
+IE,course_id,MATH 3630,ban,TechElective,90,No longer allowed,2023-01-01,,advisor
+IE,course_id,MATH 4100,ban,TechElective,90,No longer allowed,2023-01-01,,advisor
+IE,course_id,MATH 4190,ban,TechElective,90,No longer allowed,2023-01-01,,advisor
+IE,course_id,MATH 4350,ban,TechElective,90,No longer allowed,2023-01-01,,advisor
+IE,course_id,MATH 4660,ban,TechElective,90,No longer allowed,2023-01-01,,advisor
+IE,course_id,BMEN 4390,ban,TechElective,90,No longer allowed (starting Spring 2023),2023-01-01,,advisor
+
+
+
+
+
+
+
+IE,course_id,MECH 4280,ban,TechElective,50,Example row. Delete if not needed.,2025-10-14,,placeholder
+IE,regex,^PHYS 5\d{3}L$,allow,TechElective,10,Example allow for PHYS 5xxx labs. Edit as needed.,2025-10-14,,placeholder

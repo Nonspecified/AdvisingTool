@@ -1,0 +1,48 @@
+term_id,term_label,course_id,course_name,credits,bucket,prereq,coreq,min_grade,notes
+Y1F,Year 1 Fall,MECH 1100,Foundations of ME & IE,1,,,,,
+Y1F,Year 1 Fall,MATH 1310,Calculus I,4,,MATH 1230,,,ALEKS 76–100 or Precalc II C-
+Y1F,Year 1 Fall,CHEM 1210,Chemistry I,3,,,CHEM 1230L,,Co-req CHEM 1230L
+Y1F,Year 1 Fall,CHEM 1230L,Chemistry I Lab,1,,,CHEM 1210,,Co-req CHEM 1210
+Y1F,Year 1 Fall,ENGL 1010,College Writing I,3,,,,,
+Y1F,Year 1 Fall,GENED_SS,Core Curriculum (SS),3,GENED_SS,,,,
+Y1S,Year 1 Spring,MECH 1200,Intro to Engineering Design,3,,MECH 1100,,,
+Y1S,Year 1 Spring,MATH 1320,Calculus II,4,,MATH 1310,,,
+Y1S,Year 1 Spring,PHYS 1410,Physics I,3,,MATH 1310,PHYS 1410L|MATH 1310,C-,Pre/Co with MATH 1310; Co-req PHYS 1410L
+Y1S,Year 1 Spring,PHYS 1410L,Physics I Lab,1,,PHYS 1410,PHYS 1410,,Co-req PHYS 1410
+Y1S,Year 1 Spring,ENGL 1020,College Writing II,3,,ENGL 1010,,,
+Y1S,Year 1 Spring,GENED_SS,Core Curriculum (SS),3,GENED_SS,,,,
+Y2F,Year 2 Fall,IENG 2100,Engineering Design and Manufacturing,3,,MECH 1200,,,
+Y2F,Year 2 Fall,ENGN 2050,Statics,3,,PHYS 1410,MATH 1320,C-,Co-req MATH 1320
+Y2F,Year 2 Fall,MECH 2960,Materials,3,,CHEM 1210|CHEM 1230L,,C-,ME/IE majors only
+Y2F,Year 2 Fall,MATH 2310,Calculus III,4,,MATH 1320,,,
+Y2F,Year 2 Fall,ENGN 2100,Professional Development Seminar,1,,,,,
+Y2F,Year 2 Fall,PHIL 2030,Ethics (AH),3,GENED_AH,,,,
+Y2F,Year 2 Fall,PHIL 3340,Engineering Ethics (AH),3,GENED_AH,,,,
+Y2S,Year 2 Spring,ENGN 2060,Strength of Materials,3,,ENGN 2050{C-},MATH 1320,C-,
+Y2S,Year 2 Spring,MATH 3860,Probability and Statistics I,3,,MATH 1320,,,
+Y2S,Year 2 Spring,MATH 2210,Linear Algebra I,3,,MATH 1320,,,
+Y2S,Year 2 Spring,PHYS 2450,Physics of Matter,3,,PHYS 1410,MATH 1320|PHYS 2450L,,C- required in PHYS 1410
+Y2S,Year 2 Spring,PHYS 2450L,Physics of Matter Lab,1,,,PHYS 2450,,Co-req PHYS 2450
+Y2S,Year 2 Spring,ECON 2010,Principles of Microeconomics,3,GENED_SS,,,,
+Y3F,Year 3 Fall,IENG 3030,Manufacturing Processes,3,,MECH 2960,MECH 1200,,
+Y3F,Year 3 Fall,EECE 2160,ECE Applications Programming,3,,PHYS 1410|MATH 1320,,,
+Y3F,Year 3 Fall,IENG 3010,Deterministic Modeling and Analysis,3,,MATH 2310,MATH 2340,,
+Y3F,Year 3 Fall,IENG 3300,Work Design,3,,IENG 2100,,,
+Y3F,Year 3 Fall,IENG 3310,Technical Communication for IE,1,,ENGL 1020,,,
+Y3F,Year 3 Fall,GENED_AH,Core Curriculum (AH),3,GENED_AH,,,,
+Y3S,Year 3 Spring,EECE 2650,Logic Design,3,,EECE 2160,,,
+Y3S,Year 3 Spring,IENG 4070,Facilities Planning & Material Handling,3,,IENG 3030,,,
+Y3S,Year 3 Spring,IENG 3020,Stochastic Modeling and Analysis,3,,IENG 3010,MATH 3860,,
+Y3S,Year 3 Spring,IENG 4140,Engineering Economics,3,,MATH 3860,,,
+Y3S,Year 3 Spring,GENED_AH,Core Curriculum (AH),3,GENED_AH,,,,
+Y4F,Year 4 Fall,ENGN 4019,Capstone Design Proposal,3,,Senior_Status,,,
+Y4F,Year 4 Fall,IENG 4010,Automation & Control,3,,EECE 2650,,,
+Y4F,Year 4 Fall,IENG 4060,Quality Control,3,,MATH 3860,,,
+Y4F,Year 4 Fall,IENG 4025,Production & Inventory Management,3,,IENG 3010,,,
+Y4F,Year 4 Fall,MIST 4060,Data Mining for Business Intelligence,3,,,,,
+Y4S,Year 4 Spring,ENGN 4020,Capstone Design Project,3,,ENGN 4019,,,
+Y4S,Year 4 Spring,IENG 4040,Manufacturing Systems Automation,3,,IENG 4010,,,
+Y4S,Year 4 Spring,IENG 4041,Manufacturing Systems Automation Lab,1,,IENG 4040,,,
+Y4S,Year 4 Spring,IENG 4300,Human Factors Engineering,3,,IENG 3300,,,
+Y4S,Year 4 Spring,GENED_TECH,Technical Elective,3,TechElective,,,,
+Y4S,Year 4 Spring,GENED_MGMT,Management or Technical Elective,3,TechElective,,,,

@@ -1,0 +1,283 @@
+course_id,course_name,credits,prereq,notes,category,source_sheet
+BMBT4000,Intro. to Biomedical Eng.,,,,TechElective,Sheet1
+CIVE4700,Engineering Economics,,,,TechElective,Sheet1
+COMP4270,Computer Graphics I,,,,TechElective,Sheet1
+COMP4500,Mobile Robotics I,,,,TechElective,Sheet1
+COMP4600,Selected Topics,,,,TechElective,Sheet1
+EECE4100,Directed Studies,,,,TechElective,Sheet1
+EECE4240,Comp.Meth./Power Sys.Analysis,,,,TechElective,Sheet1
+EECE4410,Introduction to Biosensors,,,,TechElective,Sheet1
+EECE5240,Comp.Meth./Power Sys.Analysis,,,,TechElective,Sheet1
+EECE5250,Power Distribution System,,,,TechElective,Sheet1
+EECE5410,Introduction to Biosensors,,,,TechElective,Sheet1
+ENGN4000,Community-based EngProject III,,,,TechElective,Sheet1
+ENGN4019,Eng Capstone Design Proposal,,,,TechElective,Sheet1
+ENGY4340,Nuclear Reactor Theory,,,,TechElective,Sheet1
+MATH4030,Mathematical Analysis,,,,TechElective,Sheet1
+MATH4070,Prob & Math Stat I,,,,TechElective,Sheet1
+MATH4110,Complex Variables I,,,,TechElective,Sheet1
+MATH4130,Number Theory,,,,TechElective,Sheet1
+MATH4200,Math Problem Solving,,,,TechElective,Sheet1
+MATH4210,Abstract Algebra I,,,,TechElective,Sheet1
+MATH4260,Topology,,,,TechElective,Sheet1
+MATH4270,Geometry,,,,TechElective,Sheet1
+MATH4450,Part Differential Equat,,,,TechElective,Sheet1
+MATH4480,Math of Signal Process,,,,TechElective,Sheet1
+MATH4500,Mathematical Modeling,,,,TechElective,Sheet1
+MATH4750,Senior Seminar II,,,,TechElective,Sheet1
+MATH4760,Senior Seminar III,,,,TechElective,Sheet1
+MATH4860,Prob & Math Stat II,,,,TechElective,Sheet1
+MATH4900,Selected Topics,,,,TechElective,Sheet1
+MATH4910,Directed Study in Algebra,,,,TechElective,Sheet1
+MATH4940,Directed Study in Statistics,,,,TechElective,Sheet1
+MATH4960,Mathematics Practicum,,,,TechElective,Sheet1
+MATH5000,Discrete Structures,,,,TechElective,Sheet1
+MATH5010,Real Analysis,,,,TechElective,Sheet1
+MATH5030,Mathematical Analysis,,,,TechElective,Sheet1
+MATH5070,Functional Analysis I,,,,TechElective,Sheet1
+MATH5090,Probabilty & Math Stats,,,,TechElective,Sheet1
+MATH5100,Comp & Calc in Classroom,,,,TechElective,Sheet1
+MATH5110,Complex Variables I,,,,TechElective,Sheet1
+MATH5130,Number Theory,,,,TechElective,Sheet1
+MATH5190,Intro to Probability & Stat II,,,,TechElective,Sheet1
+MATH5200,Math Problem Solving,,,,TechElective,Sheet1
+MATH5210,Abstract Algebra I,,,,TechElective,Sheet1
+MATH5230,Linear Algebra,,,,TechElective,Sheet1
+MATH5260,Topology,,,,TechElective,Sheet1
+MATH5270,Geometry,,,,TechElective,Sheet1
+MATH5290,Differential Geometry,,,,TechElective,Sheet1
+MATH5300,Applied Mathematics I,,,,TechElective,Sheet1
+MATH5310,Applied Mathematics II,,,,TechElective,Sheet1
+MATH5320,Advanced Geometry,,,,TechElective,Sheet1
+MATH5350,History of Mathematics,,,,TechElective,Sheet1
+MATH5430,Ordinary Diff Equations,,,,TechElective,Sheet1
+MATH5450,Partial Diff Equations,,,,TechElective,Sheet1
+MATH5480,Math Of Signal Process,,,,TechElective,Sheet1
+MATH5500,Mathematical Modeling,,,,TechElective,Sheet1
+MATH5510,Calculus of Variations,,,,TechElective,Sheet1
+MATH5520,Wavelet Analysis,,,,TechElective,Sheet1
+MATH5550,Applied Math for Life Scien.,,,,TechElective,Sheet1
+MATH5580,Eval. For Beg. Teachers,,,,TechElective,Sheet1
+MATH5630,Computational Mathematics,,,,TechElective,Sheet1
+MATH5640,Applied Linear Algebra,,,,TechElective,Sheet1
+MATH5650,Special Functions,,,,TechElective,Sheet1
+MATH5660,Numerical Analysis,,,,TechElective,Sheet1
+MATH5680,Approximation Theory,,,,TechElective,Sheet1
+MATH5700,Probability & Statistics,,,,TechElective,Sheet1
+MATH5720,Optimization,,,,TechElective,Sheet1
+MATH5750,Applied Statistics with R,,,,TechElective,Sheet1
+MATH5760,Stat Prog using SAS,,,,TechElective,Sheet1
+MATH5780,Stat Inference & Data Mining,,,,TechElective,Sheet1
+MATH5820,Time Series,,,,TechElective,Sheet1
+MATH5840,Stochastic Process,,,,TechElective,Sheet1
+MATH5870,Measure and Probability Theory,,,,TechElective,Sheet1
+MATH5880,Math Statistics,,,,TechElective,Sheet1
+MATH5900,Stat Quality Control,,,,TechElective,Sheet1
+MATH5910,Lin Stat Modlng & Regres,,,,TechElective,Sheet1
+MATH5920,Multivariate Statistics,,,,TechElective,Sheet1
+MATH5930,Experimental Design,,,,TechElective,Sheet1
+MECH4000,Mechanical Eng Project III,,,,TechElective,Sheet1
+MECH4040,Adv Mech Dynamic Meas Sys,,,,TechElective,Sheet1
+MECH4260,Green Energy Engineering,,,,TechElective,Sheet1
+MECH4280,Fund.of Eng. (ME) Review,,,,TechElective,Sheet1
+MECH4460,Computational Thermal Fluids,,,,TechElective,Sheet1
+MECH4500,Nanoscale Transport Phenomena,,,,TechElective,Sheet1
+MECH4530,Mechatronics,,,,TechElective,Sheet1
+MECH4570,Vibrations,,,,TechElective,Sheet1
+MECH4830,Aerodynamics & Flight Mech,,,,TechElective,Sheet1
+MECH4860,Ocean Engineering,,,,TechElective,Sheet1
+MECH4910,Industrial Experience (permission required),,,,TechElective,Sheet1
+MECH4991,Directed Studies in ME,,,,TechElective,Sheet1
+MECH5040,Energy Eng Workshop,,,,TechElective,Sheet1
+MECH5050,Directed Studies - ME,,,,TechElective,Sheet1
+MECH5120,Applied Finite Elem. Analysis,,,,TechElective,Sheet1
+MECH5130,Theory of Finite Elem Analysis,,,,TechElective,Sheet1
+MECH5140,FEA of Composites,,,,TechElective,Sheet1
+MECH5150,Struct.Dynam.Mod.Techniques,,,,TechElective,Sheet1
+MECH5180,Signal Proc Techniques,,,,TechElective,Sheet1
+MECH5190,Engineering Spectral Analysis,,,,TechElective,Sheet1
+MECH5200,Numerical Meth/Part Diff Equat,,,,TechElective,Sheet1
+MECH5210,Solar Fundamentals,,,,TechElective,Sheet1
+MECH5220,Wind Energy Fundamentals,,,,TechElective,Sheet1
+MECH5230,Structural Health Monitoring,,,,TechElective,Sheet1
+MECH5240,Fund of Acoustics,,,,TechElective,Sheet1
+MECH5250,Grid-Conn.Solar Elec. Sys.,,,,TechElective,Sheet1
+MECH5260,Transport Proc.in Energy Sys.,,,,TechElective,Sheet1
+MECH5270,Solar Energy Engineering,,,,TechElective,Sheet1
+MECH5280,Photovoltaics Manufacturing,,,,TechElective,Sheet1
+MECH5285,Energy Policy and Energy Codes,,,,TechElective,Sheet1
+MECH5290,Fuel Cell Fundamentals,,,,TechElective,Sheet1
+MECH5300,Autonomous Robotic Systems,,,,TechElective,Sheet1
+MECH5320,Off-Grid Solar Electric System,,,,TechElective,Sheet1
+MECH5340,Green Combustion and Biofuels,,,,TechElective,Sheet1
+MECH5350,Fund. of Sustainable Energy,,,,TechElective,Sheet1
+MECH5420,Convective Heat/mass Tr,,,,TechElective,Sheet1
+MECH5450,Adv Indust Heat & MassTransfer,,,,TechElective,Sheet1
+MECH5490,Cooling/Electronic Equipment,,,,TechElective,Sheet1
+MECH5500,Vibrations,,,,TechElective,Sheet1
+MECH5530,MEMS & Microsystems,,,,TechElective,Sheet1
+MECH5540,Dynamic Sys & Controls,,,,TechElective,Sheet1
+MECH5580,Aero/Wind Eng,,,,TechElective,Sheet1
+MECH5590,Multi-Scale Comp. Fluid Dyn. I,,,,TechElective,Sheet1
+MECH5620,Solid Mechanics I,,,,TechElective,Sheet1
+MECH5710,Quality Engineering,,,,TechElective,Sheet1
+MECH5740,Design For Reliabil Eng,,,,TechElective,Sheet1
+MECH5750,Industrial Des of Exper,,,,TechElective,Sheet1
+MECH5760,Engineering Proj Mngmnt,,,,TechElective,Sheet1
+MECH5790,Robotics,,,,TechElective,Sheet1
+MECH5810,Adv Fluid Mechanics,,,,TechElective,Sheet1
+MECH5830,Advanced Aerodynamics,,,,TechElective,Sheet1
+MECH5840,Ocean Engineering,,,,TechElective,Sheet1
+MECH5910,Mech Behavior of Materials,,,,TechElective,Sheet1
+MECH5930,Graduate Co-op Education,,,,TechElective,Sheet1
+MECH5960,Mech of Composite Materials,,,,TechElective,Sheet1
+MECH5970,Processing of Composites,,,,TechElective,Sheet1
+MECH5980,Experimental Charact. of Comp.,,,,TechElective,Sheet1
+PHYS4010,Radiation Safety & Control I,,,,TechElective,Sheet1
+PHYS4020L,Radiation Safety & Control II,,,,TechElective,Sheet1
+PHYS4060,Nuclear Instrumentation,,,,TechElective,Sheet1
+PHYS4090,Nuclear Instrumentation,,,,TechElective,Sheet1
+PHYS4110,Physics Perspectives,,,,TechElective,Sheet1
+PHYS4110L,Sr Research In Rad Sci,,,,TechElective,Sheet1
+PHYS4130,Mechanics,,,,TechElective,Sheet1
+PHYS4170,Space Science Mission Design,,,,TechElective,Sheet1
+PHYS4210,Statistical Thermodynamics,,,,TechElective,Sheet1
+PHYS4240,Environmental Health Physics,,,,TechElective,Sheet1
+PHYS4350,Intro Quantum Mechanics I,,,,TechElective,Sheet1
+PHYS4360,Intro Quantum Mechanics II,,,,TechElective,Sheet1
+PHYS4390,Electro-Optics,,,,TechElective,Sheet1
+PHYS4400,Image Processing,,,,TechElective,Sheet1
+PHYS4410,Radiochemistry,,,,TechElective,Sheet1
+PHYS4450L,Characterization of Materials,,,,TechElective,Sheet1
+PHYS4470,Laser Physics & Applications,,,,TechElective,Sheet1
+PHYS4530L,Health Physics Capstone,,,,TechElective,Sheet1
+PHYS4531L,Optics Project,,,,TechElective,Sheet1
+PHYS4540,Physics Capstone,,,,TechElective,Sheet1
+PHYS4560,Radiative Proc in Astrophysics,,,,TechElective,Sheet1
+PHYS4610,Nuclear Physics I,,,,TechElective,Sheet1
+PHYS4620,Radiation Biology,,,,TechElective,Sheet1
+PHYS4630,Computational Methods Physics,,,,TechElective,Sheet1
+PHYS4640,Particle Astrophysics,,,,TechElective,Sheet1
+PHYS4650,Physics of Radiation Oncology,,,,TechElective,Sheet1
+PHYS4670L,Automation Techniques,,,,TechElective,Sheet1
+PHYS4690,Plasma Physics,,,,TechElective,Sheet1
+PHYS4720,Solid State Physics,,,,TechElective,Sheet1
+PHYS4770,SS Elec & Optoelec Devices,,,,TechElective,Sheet1
+PHYS4780,Integ Optics: WG & Lasers,,,,TechElective,Sheet1
+PHYS4810,Math Methods of Rad Sci,,,,TechElective,Sheet1
+PHYS4820,Num Methods of Rad Sci,,,,TechElective,Sheet1
+PHYS4950L,Spec Research Problems I,,,,TechElective,Sheet1
+PHYS4960L,Spec Research Prob II,,,,TechElective,Sheet1
+PHYS4970L,Senior Thesis in Physics,,,,TechElective,Sheet1
+PHYS5010,"Energy, Force & Motion",,,,TechElective,Sheet1
+PHYS5130,Mechanics,,,,TechElective,Sheet1
+PHYS5170,Space Science Mission Design,,,,TechElective,Sheet1
+PHYS5210,Statistical Thermodynamics,,,,TechElective,Sheet1
+PHYS5350,Intro Quantum Mechanics I,,,,TechElective,Sheet1
+PHYS5360,Intro Quantum Mechanics II,,,,TechElective,Sheet1
+PHYS5380,Physical Optics & Waves,,,,TechElective,Sheet1
+PHYS5390,Electro-Optics,,,,TechElective,Sheet1
+PHYS5400,Image Processing,,,,TechElective,Sheet1
+PHYS5450L,Characterization of Materials,,,,TechElective,Sheet1
+PHYS5470,Laser Physics & Applications,,,,TechElective,Sheet1
+PHYS5520,Contemporary Physics,,,,TechElective,Sheet1
+PHYS5530,Electromagnetism I,,,,TechElective,Sheet1
+PHYS5540,Electromagnetism II,,,,TechElective,Sheet1
+PHYS5550,Introduction to Space Physics,,,,TechElective,Sheet1
+PHYS5560,Radiative Proc in Astrophysics,,,,TechElective,Sheet1
+PHYS5610,Nuclear Physics I,,,,TechElective,Sheet1
+PHYS5630,Computational Methods in Phys.,,,,TechElective,Sheet1
+PHYS5640,Particle Astrophysics,,,,TechElective,Sheet1
+PHYS5670L,Automation Techniques,,,,TechElective,Sheet1
+PHYS5690,Plasma Physics,,,,TechElective,Sheet1
+PHYS5720,Solid State Physics,,,,TechElective,Sheet1
+PHYS5770,SS Elec & Optoelec Devices,,,,TechElective,Sheet1
+PHYS5780,Integ Optics: WG & Lasers,,,,TechElective,Sheet1
+PHYS5830,Astronomy and Astrophysics I,,,,TechElective,Sheet1
+PHYS5870,Cloud Physics,,,,TechElective,Sheet1
+PHYS5930L,Graduate Physics Lab,,,,TechElective,Sheet1
+PLAS4030,Mech Behavior of Polymers,,,,TechElective,Sheet1
+PLAS4040,Process Control,,,,TechElective,Sheet1
+PLAS4060,"Polymer Struct, Prop and Appl",,,,TechElective,Sheet1
+PLAS4090,Senior Research Plastics I,,,,TechElective,Sheet1
+PLAS4100,Coop Assessment II,,,,TechElective,Sheet1
+PLAS4150,Capstone Project I,,,,TechElective,Sheet1
+PLAS4160,Capstone Project II,,,,TechElective,Sheet1
+PLAS4170,Honors Capstone Project II,,,,TechElective,Sheet1
+PLAS4180,Product & Process Design,,,,TechElective,Sheet1
+PLAS4200,Co-op Assessment 2 (6 months),,,,TechElective,Sheet1
+PLAS4500,Nanoscale Transport Phenomena,,,,TechElective,Sheet1
+PLAS5000,Adv Proj In Plastics I,,,,TechElective,Sheet1
+PLAS5010,Adv Proj In Plastics II,,,,TechElective,Sheet1
+PLAS5030,Mech Behavior of Polymers,,,,TechElective,Sheet1
+PLAS5060,Poly Struc Properties & Applic,,,,TechElective,Sheet1
+PLAS5090,Plastics Processing Theory I,,,,TechElective,Sheet1
+PLAS5100,Plastics Processing Theory II,,,,TechElective,Sheet1
+PLAS5110,Polymer Blends,,,,TechElective,Sheet1
+PLAS5120,Porous Polymers,,,,TechElective,Sheet1
+PLAS5130,New Plastics Materials,,,,TechElective,Sheet1
+PLAS5140,Statistics for Six Sigma,,,,TechElective,Sheet1
+PLAS5150,Lean Plastics Manufacturing,,,,TechElective,Sheet1
+PLAS5180,Plastics Product Design,,,,TechElective,Sheet1
+PLAS5220,Adv Proj in Plastics IV,,,,TechElective,Sheet1
+PLAS5240,"Proc Analysis, Instrum & Contr",,,,TechElective,Sheet1
+PLAS5250,Syn Fibers:Proc.-Stru.-Prop.,,,,TechElective,Sheet1
+PLAS5280,Pl Information Data Bases,,,,TechElective,Sheet1
+PLAS5300,Selected Topics,,,,TechElective,Sheet1
+PLAS5320,Adhesives & Adhesion,,,,TechElective,Sheet1
+PLAS5330,Coatings Science & Tech I,,,,TechElective,Sheet1
+PLAS5340,Coatings Science & Tech. II,,,,TechElective,Sheet1
+PLAS5350,Rubber Technology,,,,TechElective,Sheet1
+PLAS5360,Rheology of Polymers,,,,TechElective,Sheet1
+PLAS5370,Business Law for Engineers,,,,TechElective,Sheet1
+PLAS5400,Commercial Develop of Plastics,,,,TechElective,Sheet1
+PLAS5410,Computer App in Plastics,,,,TechElective,Sheet1
+PLAS5420,Colloidal Nanosci & Nano Eng,,,,TechElective,Sheet1
+PLAS5440,Advanced Plastics Materials,,,,TechElective,Sheet1
+PLAS5450,Additives for Polymer Material,,,,TechElective,Sheet1
+PLAS5470,Mat.for Renewable Energy & Sus,,,,TechElective,Sheet1
+PLAS5480,Analytical and Numerical Meth,,,,TechElective,Sheet1
+PLAS5490,Product Design for Elastomers,,,,TechElective,Sheet1
+PLAS5500,Processing with Elastomers,,,,TechElective,Sheet1
+PLAS5510,Extrusion Die Design,,,,TechElective,Sheet1
+PLAS5520,Machine Design,,,,TechElective,Sheet1
+PLAS5530,Medical Device Design I,,,,TechElective,Sheet1
+PLAS5540,Medical Device Design II,,,,TechElective,Sheet1
+PLAS5630,Curr Top/ Plastics Materials I,,,,TechElective,Sheet1
+PLAS5640,Curr Top/Plastics Materials II,,,,TechElective,Sheet1
+PLAS5650,Thermosets,,,,TechElective,Sheet1
+PLAS5660,Poly Mat'l Sys Solution,,,,TechElective,Sheet1
+PLAS5680,Dynamic Mech Prop II,,,,TechElective,Sheet1
+PLAS5690,Curr Top/Plastics Design I,,,,TechElective,Sheet1
+PLAS5700,Curr Top/Plastics Processing I,,,,TechElective,Sheet1
+PLAS5710,Plastics Processing Eng Lab I,,,,TechElective,Sheet1
+PLAS5720,Adv. Plastics Proc Eng Lab,,,,TechElective,Sheet1
+PLAS5740,Advance Physical Prop. Lab,,,,TechElective,Sheet1
+PLAS5750,Biomaterials I,,,,TechElective,Sheet1
+PLAS5760,Advanced Mold Design,,,,TechElective,Sheet1
+PLAS5770,Plastics Process Engineering I,,,,TechElective,Sheet1
+PLAS5780,Advanced Plastics Processing,,,,TechElective,Sheet1
+PLAS5790,Prob In Biomat/Directed Study,,,,TechElective,Sheet1
+PLAS5820,Curr Top/Plastics Design II,,,,TechElective,Sheet1
+PLAS5830,Adv Res Methodology,,,,TechElective,Sheet1
+PLAS5850,Computer Aided Engineering I,,,,TechElective,Sheet1
+PLAS5890,Polymer Nanocomposites,,,,TechElective,Sheet1
+PLAS5900,Survey of Intellectual Prop,,,,TechElective,Sheet1
+PLAS5910,Industrial Thesis Develop I,,,,TechElective,Sheet1
+PLAS5930,Cooperative Education,,,,TechElective,Sheet1
+PLAS5950,Thermoplastic Elastomers,,,,TechElective,Sheet1
+PLAS5960,"Plastics,Elastomers& Additives",,,,TechElective,Sheet1
+PLAS5970,Plastics & Environment,,,,TechElective,Sheet1
+PLAS6010,Grad Industrial Coop Educ I,,,,TechElective,Sheet1
+PLAS6020,Med. Device Dev. Regulation,,,,TechElective,Sheet1
+PLAS6060,Platics Manufacturing Sys Eng,,,,TechElective,Sheet1
+PLAS6070,Supply Chain Mgmt.for Engineer,,,,TechElective,Sheet1
+PLAS6100,Plastics Industry Development,,,,TechElective,Sheet1
+PLAS6110,Coloration of Eng.Thermo.,,,,TechElective,Sheet1
+PLAS6180,Structural Product Design,,,,TechElective,Sheet1
+PLAS6420,Char.of Polymers & Plastics,,,,TechElective,Sheet1
+PLAS6500,Nan.Trans.Phen.for.Man.Nano.,,,,TechElective,Sheet1
+PLAS6750,Biomaterials II,,,,TechElective,Sheet1
+PLAS6780,New Dev. in Polymer Man.,,,,TechElective,Sheet1
+PLAS6820,Physical Polymer Science,,,,TechElective,Sheet1
+PLAS6820,Physical Polymer Science,,,,TechElective,Sheet1
