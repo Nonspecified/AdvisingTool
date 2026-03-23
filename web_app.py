@@ -104,7 +104,7 @@ def process():
 
         # Step 3: filled CSV → interactive HTML CPR map
         html_path = generate_html(filled_csv)
-        html_content = html_path.read_text(encoding="utf-8")
+        html_content = Path(html_path).read_text(encoding="utf-8")
 
     # Return the interactive HTML page directly in the browser
     return html_content, 200, {"Content-Type": "text/html; charset=utf-8"}
