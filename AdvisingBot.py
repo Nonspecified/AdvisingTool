@@ -11,8 +11,12 @@ import webbrowser
 import threading
 from pathlib import Path
 from datetime import datetime, date
-import tkinter as tk
-from tkinter import filedialog, messagebox, scrolledtext
+try:
+    import tkinter as tk
+    from tkinter import filedialog, messagebox, scrolledtext
+    HAS_TKINTER = True
+except ImportError:
+    HAS_TKINTER = False
 
 # Prevent host Python/Conda env leakage from breaking frozen pandas imports.
 os.environ.pop("_PYTHON_SYSCONFIGDATA_NAME", None)
@@ -1940,6 +1944,9 @@ def main():
         from web_app import app as flask_app
     except ImportError:
         # Flask not installed — fall back to Tkinter GUI
+        if not HAS_TKINTER:
+            print("Neither Flask nor Tkinter available. Cannot start.")
+            return
         root = tk.Tk()
         AdvisingBotApp(root)
         root.mainloop()
