@@ -106,6 +106,19 @@ def process():
         html_path = generate_html(filled_csv)
         html_content = Path(html_path).read_text(encoding="utf-8")
 
+    # Inject "New Student" button and reset URL so refresh goes to upload page
+    injection = """
+<style>
+#new-student-btn{position:fixed;top:12px;right:16px;z-index:9999;
+  background:#0f3460;color:#a0c4ff;border:1px solid #1565c0;border-radius:6px;
+  padding:7px 16px;font-size:.85rem;cursor:pointer;font-family:"Segoe UI",Arial,sans-serif;}
+#new-student-btn:hover{background:#1565c0;color:#fff;}
+</style>
+<button id="new-student-btn" onclick="location.href='/'">New Student</button>
+<script>history.replaceState({}, '', '/');</script>
+"""
+    html_content = html_content.replace("</body>", injection + "</body>", 1)
+
     # Return the interactive HTML page directly in the browser
     return html_content, 200, {"Content-Type": "text/html; charset=utf-8"}
 
