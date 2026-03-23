@@ -12,8 +12,7 @@ import os
 import tempfile
 from pathlib import Path
 
-from flask import Flask, request, send_file, render_template_string
-from weasyprint import HTML as WPHtml
+from flask import Flask, request, render_template_string
 
 # Import the three pipeline steps from the main application
 from AdvisingBot import convert_pdf_to_csv, fill_pathway, generate_html
@@ -103,28 +102,14 @@ def process():
         # Step 2: CSV → filled pathway CSV
         filled_csv = fill_pathway(csv_path)
 
-        # Step 3: filled CSV → HTML string
+        # Step 3: filled CSV → interactive HTML CPR map
         html_path = generate_html(filled_csv)
         html_content = html_path.read_text(encoding="utf-8")
 
-        # Convert HTML → PDF bytes using WeasyPrint
-        pdf_bytes = WPHtml(string=html_content, base_url=str(tmp)).write_pdf()
-
-        # Derive a safe download filename from the HTML filename stem
-        stem = html_path.stem  # e.g. "Smith_2022_ME_pre2025_cpr"
-        download_name = stem + ".pdf"
-
-    # Return PDF directly — temp directory is already cleaned up
-    import io
-    return send_file(
-        io.BytesIO(pdf_bytes),
-        mimetype="application/pdf",
-        as_attachment=True,
-        download_name=download_name,
-    )
+    # Return the interactive HTML page directly in the browser
+    return html_content, 200, {"Content-Type": "text/html; charset=utf-8"}
 
 
 if __name__ == "__main__":
-    # host="0.0.0.0" makes it reachable from other machines on the same network.
-    # Change to host="127.0.0.1" to restrict to localhost only.
-    app.run(host="0.0.0.0", port=5000, debug=False)
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port, debug=False)
