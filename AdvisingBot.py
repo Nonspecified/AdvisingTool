@@ -1935,9 +1935,29 @@ class AdvisingBotApp:
 
 
 def main():
-    root = tk.Tk()
-    AdvisingBotApp(root)
-    root.mainloop()
+    import time
+    try:
+        from web_app import app as flask_app
+    except ImportError:
+        # Flask not installed — fall back to Tkinter GUI
+        root = tk.Tk()
+        AdvisingBotApp(root)
+        root.mainloop()
+        return
+
+    host, port = "127.0.0.1", 5000
+    threading.Thread(
+        target=lambda: flask_app.run(host=host, port=port, debug=False, use_reloader=False),
+        daemon=True,
+    ).start()
+    time.sleep(0.8)  # brief pause for Flask to bind
+    webbrowser.open(f"http://{host}:{port}")
+    print(f"AdvisingBot running at http://{host}:{port}  —  press Ctrl+C to quit.")
+    try:
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        print("\nShutting down.")
 
 
 if __name__ == "__main__":
