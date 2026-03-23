@@ -1,6 +1,7 @@
 # AdvisingBot.py — One-click transcript PDF → HTML curriculum map
 # Select a PDF, all three steps run automatically, browser opens with result.
 # pip install PyPDF2 pandas
+from __future__ import annotations
 
 import csv
 import re
