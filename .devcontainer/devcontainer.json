@@ -1,0 +1,16 @@
+{
+  "name": "AdvisingBot",
+  "image": "mcr.microsoft.com/devcontainers/python:3.12-bullseye",
+  "postCreateCommand": "pip install -r requirements.txt && sudo apt-get install -y libpango-1.0-0 libcairo2 libgdk-pixbuf2.0-0 libffi-dev shared-mime-info",
+  "postStartCommand": "python web_app.py",
+  "forwardPorts": [5000],
+  "portsAttributes": {
+    "5000": {
+      "label": "AdvisingBot",
+      "onAutoForward": "openBrowser"
+    }
+  },
+  "remoteEnv": {
+    "ADVISINGBOT_PASSWORD": "${localEnv:ADVISINGBOT_PASSWORD}"
+  }
+}

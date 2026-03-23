@@ -16,6 +16,14 @@ transcript*.csv
 *_cpr.html
 *_blank.png
 
+# Legacy build artifacts (keep the scripts, not the binaries)
+legacy/dist/
+legacy/build/
+legacy/__pycache__/
+
+# Root spec file (lives in legacy/)
+AdvisingBot.spec
+
 # OS
 .DS_Store
 Thumbs.db

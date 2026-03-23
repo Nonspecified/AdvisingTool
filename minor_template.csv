@@ -1,0 +1,29 @@
+slot_type,course_id,course_name,credits,pool_id,pool_label,pool_requirement,prereq,coreq,min_grade,notes
+# HOW TO USE THIS TEMPLATE:
+# 1. Save a copy as  minor_YOURCODE.csv  (e.g. minor_MUSIC.csv, minor_PSYCH.csv)
+#    The code must match what appears in the student transcript: "MUSIC Minor" -> MUSIC
+# 2. Delete these comment lines before saving.
+# 3. Fill in rows using the column guide below.
+#
+# COLUMN GUIDE:
+#   slot_type        "required" for a mandatory course, "pool" for a choose-X-from-list group
+#   course_id        Official course ID exactly as it appears on transcripts  (e.g. "MUSC 2210")
+#   course_name      Human-readable course name shown in the CPR map
+#   credits          Credit hours (numeric)
+#   pool_id          Group identifier for pool courses — all rows in the same pool share one ID
+#                    (e.g. "pool_core", "pool_elec_1"). Leave blank for required courses.
+#   pool_label       Friendly heading shown in the CPR map for this pool group
+#                    (e.g. "Choose 2 Core Courses"). Leave blank to auto-generate.
+#   pool_requirement How many the student must satisfy: "2 courses" or "9 credits"
+#                    Leave blank for required courses.
+#   prereq           Prerequisite course IDs in free text (e.g. "MUSC 1100"). Leave blank if none.
+#   coreq            Corequisite course IDs in free text. Leave blank if none.
+#   min_grade        Minimum passing grade for this requirement (e.g. "C-"). Leave blank if any pass.
+#   notes            Any advisory notes shown in the CPR map.
+#
+# EXAMPLE — a simple 2-required + 1-pool-of-3 minor:
+required,MUSC 1100,Music Theory I,3,,,,,,C-,
+required,MUSC 2200,Music Theory II,3,,,, MUSC 1100,,C-,
+pool,MUSC 3310,Orchestration,3,pool_adv,Choose 1 Advanced Course,1 course,MUSC 2200,,C,
+pool,MUSC 3320,Counterpoint,3,pool_adv,Choose 1 Advanced Course,1 course,MUSC 2200,,C,
+pool,MUSC 3410,Music History,3,pool_adv,Choose 1 Advanced Course,1 course,MUSC 2200,,C,

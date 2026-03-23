@@ -1,0 +1,16 @@
+{
+  "ME": {
+    "plan_patterns": ["mechanical engineering", "mech eng", "mech. eng"],
+    "plan_short_values": ["ME"],
+    "has_te": true,
+    "variants": ["pre2025", "2025plus"],
+    "variant_cutoff_year": 2025
+  },
+  "IE": {
+    "plan_patterns": ["industrial engineering", "indust eng", "ind. eng"],
+    "plan_short_values": ["IE"],
+    "has_te": true,
+    "variants": ["pre2025", "2025plus"],
+    "variant_cutoff_year": 2025
+  }
+}

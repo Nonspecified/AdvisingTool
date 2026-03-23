@@ -1,0 +1,1944 @@
+# AdvisingBot.py — One-click transcript PDF → HTML curriculum map
+# Select a PDF, all three steps run automatically, browser opens with result.
+# pip install PyPDF2 pandas
+
+import csv
+import re
+import os
+import sys
+import json
+import webbrowser
+import threading
+from pathlib import Path
+from datetime import datetime, date
+import tkinter as tk
+from tkinter import filedialog, messagebox, scrolledtext
+
+# Prevent host Python/Conda env leakage from breaking frozen pandas imports.
+os.environ.pop("_PYTHON_SYSCONFIGDATA_NAME", None)
+os.environ.pop("PYTHONHOME", None)
+os.environ.pop("PYTHONPATH", None)
+
+from PyPDF2 import PdfReader
+import pandas as pd
+
+
+def _resource_path(relative: str) -> Path:
+    """Resolve a data-file path whether running from source or PyInstaller bundle."""
+    base = Path(getattr(sys, "_MEIPASS", Path(__file__).parent))
+    return base / relative
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# SHARED CONSTANTS & HELPERS
+# ═══════════════════════════════════════════════════════════════════════════════
+
+# Step 1 CSV output columns
+TRANSCRIPT_HEADERS = [
+    "course_id", "course_name", "term", "term_code", "grade", "status",
+    "attempted_credits", "earned_credits", "grade_points",
+    "is_transfer", "transfer_from", "transfer_effective_term", "transfer_effective_date",
+    "program", "plan", "plan_short",
+    "full_name", "first_name", "last_name", "student_id", "email",
+    "transcript_date", "source_file",
+]
+
+# Step 2 grade / status tables
+PASS_LETTERS  = {"A", "A-", "B+", "B", "B-", "C+", "C", "C-", "D+", "D", "D-", "P", "S", "T", "CR"}
+PASS_SPECIAL  = {"P", "S", "T", "CR"}
+STATUS_PRIO   = {"passed": 4, "transfer": 4, "in_progress": 3, "completed": 3,
+                 "failed": 2, "withdrawn": 1, "unknown": 0}
+TC_ORDER      = {"WI": 1, "SP": 2, "SU": 3, "FA": 4}
+GRADE_SCORE   = {"A": 13, "A-": 12, "B+": 11, "B": 10, "B-": 9,
+                 "C+": 8, "C": 7, "C-": 6, "D+": 5, "D": 4, "D-": 3, "F": 0, "W": -1}
+
+# HTML output constants
+YEAR_LABELS      = {1: "Freshman Year", 2: "Sophomore Year", 3: "Junior Year", 4: "Senior Year"}
+TERM_ORDER_HTML  = ["Y1F", "Y1S", "Y2F", "Y2S", "Y3F", "Y3S", "Y4F", "Y4S"]
+SEM_LABELS       = {"F": "Fall", "S": "Spring"}
+ELECTIVE_BUCKETS = {"GENED_AH", "GENED_SS", "TechElective"}
+
+
+# ── shared utility functions ──────────────────────────────────────────────────
+
+def norm_id(s: str) -> str:
+    """Normalize a course ID to uppercase, single-spaced, no dots."""
+    t = str(s or "").upper().replace(".", " ").strip()
+    t = re.sub(r"\s+", " ", t)
+    t = re.sub(r"^([A-Z&]+)\s*([0-9][0-9A-Z]*)$", r"\1 \2", t)
+    return t
+
+
+_GTOK_RE = re.compile(r"\b(A-?|B\+?|B-?|C\+?|C-?|D\+?|D-?|F|W|P|S|T|CR)\b", re.I)
+
+
+def _clean_grade_token(s) -> str:
+    s = "" if s is None else str(s)
+    m = _GTOK_RE.search(s)
+    return m.group(0).upper() if m else ""
+
+
+def grade_meets_min(grade: str, min_grade: str) -> bool:
+    g = _clean_grade_token(grade)
+    m = _clean_grade_token(min_grade)
+    if not g:
+        return False
+    if not m:
+        return g in PASS_LETTERS or g in PASS_SPECIAL
+    if g in PASS_SPECIAL:
+        return True
+    if g not in GRADE_SCORE or m not in GRADE_SCORE:
+        return False
+    return GRADE_SCORE[g] >= GRADE_SCORE[m]
+
+
+# Regex for extracting course IDs from prereq/coreq text
+PREREQ_COURSE_RE = re.compile(r"\b([A-Z]{2,}\.? ?\d{3,4}[A-Z]?)\b")
+
+
+def extract_course_ids(text: str) -> list:
+    if not isinstance(text, str) or not text.strip():
+        return []
+    return [norm_id(m.group(1)) for m in PREREQ_COURSE_RE.finditer(text.upper())]
+
+
+def css_id(course_id: str) -> str:
+    return "c-" + re.sub(r"[^A-Za-z0-9]", "-", str(course_id)).strip("-")
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# STEP 1 — PDF → CSV
+# ═══════════════════════════════════════════════════════════════════════════════
+
+TERM_HEADER_RE = re.compile(r"^\s*(\d{4})\s+(Fall|Spring|Summer|Winter)\s*$", re.I)
+PROGRAM_RE     = re.compile(r"^\s*Program:\s*(?P<program>.+?)\s*$", re.I)
+PLAN_RE        = re.compile(r"^\s*Plan:\s*(?P<plan>.+?)\s*$", re.I)
+
+TRANSCRIPT_COURSE_RE = re.compile(
+    r"^(?P<course_id>[A-Z]{2,5}\s+\d{4}[A-Z]?)\s+"
+    r"(?P<course_name>.+?)\s+"
+    r"(?P<attempted>\d+\.\d{2})\s+"
+    r"(?P<earned>\d+\.\d{2})"
+    r"(?:\s+(?P<grade>(?:A|B|C|D|F|P|S|U|IP|I|W)(?:[+-])?))?"
+    r"\s+(?P<points>\d+\.\d{3})\s*$"
+)
+COURSE_TRANSFER_RE = re.compile(
+    r"^(?P<course_id>[A-Z]{2,5}\s+\d{4}[A-Z]?)\s+"
+    r"(?P<course_name>.+?)\s+"
+    r"(?P<attempted>\d+\.\d{2})\s+"
+    r"(?P<grade>(?:T|A|B|C|D|F|P|S|U)(?:[+-])?)\s*$"
+)
+INCOMING_TRANSFER_ROW_RE = re.compile(
+    r"^(?P<course_id>[A-Z]{2,5}\s+\d{4}[A-Z]?)\s+"
+    r"(?P<course_name>.+?)\s+"
+    r"(?P<attempted>\d+\.\d{2})\s+"
+    r"(?P<grade>(?:T|A|B|C|D|F|P|S|U)(?:[+-])?)"
+    r"(?:\s+.*)?$"
+)
+TRANSFER_FROM_RE    = re.compile(r"^Transfer Credit from\s+(?P<inst>.+?)\s*$", re.I)
+TRANSFER_TO_TERM_RE = re.compile(
+    r"^Transferred\s+to\s+Term\s+(?P<year>\d{4})\s+(?P<term>Fall|Spring|Summer|Winter)\s+as\s*$",
+    re.I,
+)
+REPEAT_FLAG_RE  = re.compile(r"^Repeated:", re.I)
+NAME_RE         = re.compile(r"^\s*Name:\s*(?P<name>.+?)\s*$", re.I)
+STUDENT_ID_RE   = re.compile(r"^\s*Student ID:\s*(?P<sid>.+?)\s*$", re.I)
+EMAIL_INLINE_RE = re.compile(r"[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}", re.I)
+DATE_LINE_RE    = re.compile(r"^\s*(?P<mdy>\d{1,2}/\d{1,2}/\d{4})\s*$")
+
+SKIP_LINE_HINTS = (
+    "Course Description Attempted Earned Grade Points",
+    "Attempted Earned GPA", "UnitsPoints",
+    "Term GPA:", "Cum GPA:", "Undergraduate Career Totals",
+    "End of", "Beginning of Undergraduate Record",
+    "Incoming  Course",
+)
+
+
+def _term_to_code(year: int, term: str) -> str:
+    mm = {"Spring": "SP", "Summer": "SU", "Fall": "FA", "Winter": "WI"}
+    return f"{year}{mm[term]}"
+
+
+def _term_start_date(year: int, term: str) -> date:
+    month = {"Spring": 1, "Summer": 5, "Fall": 9, "Winter": 12}[term]
+    return date(year, month, 1)
+
+
+def _classify_status(grade, points, is_latest_term: bool) -> str:
+    if grade:
+        g = grade.upper()
+        if g == "W":
+            return "withdrawn"
+        if g == "T":
+            return "transfer"
+        if g in {"IP", "I"}:
+            return "in_progress"
+        return "completed"
+    if is_latest_term:
+        return "in_progress"
+    return "completed" if (points and float(points) > 0.0) else "in_progress"
+
+
+def _infer_plan_short(plan: str) -> str:
+    p = plan.lower() if plan else ""
+    if "industrial engineering" in p:
+        return "IE"
+    if "mechanical engineering" in p:
+        return "ME"
+    return "OTHER" if p else ""
+
+
+def _extract_pdf_text(pdf_path: Path) -> list:
+    reader = PdfReader(str(pdf_path))
+    lines = []
+    for page in reader.pages:
+        t = page.extract_text() or ""
+        lines.extend([ln.rstrip() for ln in t.splitlines()])
+    return lines
+
+
+def _parse_student_header(lines: list, source_file: str) -> dict:
+    full_name = student_id = email = tdate_iso = ""
+    for ln in lines[:200]:
+        if TERM_HEADER_RE.match(ln) or ln.strip() == "Transfer Credits":
+            break
+        m = NAME_RE.match(ln)
+        if m:
+            full_name = m.group("name").strip()
+        m = STUDENT_ID_RE.match(ln)
+        if m:
+            student_id = m.group("sid").strip()
+        if not email:
+            em = EMAIL_INLINE_RE.search(ln)
+            if em:
+                email = em.group(0)
+        if not tdate_iso:
+            dm = DATE_LINE_RE.match(ln)
+            if dm:
+                try:
+                    tdate_iso = datetime.strptime(dm.group("mdy"), "%m/%d/%Y").date().isoformat()
+                except ValueError:
+                    pass
+
+    first_name = last_name = ""
+    if full_name:
+        parts = [p for p in full_name.replace(",", " ").split() if p]
+        if len(parts) >= 2:
+            first_name, last_name = parts[0], parts[-1]
+        elif parts:
+            first_name = parts[0]
+
+    return {
+        "full_name": full_name, "first_name": first_name, "last_name": last_name,
+        "student_id": student_id, "email": email,
+        "transcript_date": tdate_iso, "source_file": source_file,
+    }
+
+
+def _parse_courses(lines: list) -> list:
+    rows = []
+    current_term = current_term_code = None
+    term_positions = [i for i, ln in enumerate(lines) if TERM_HEADER_RE.match(ln)]
+    latest_term_index = term_positions[-1] if term_positions else -1
+
+    in_transfer_block = False
+    transfer_from = transfer_effective_term = transfer_effective_date = ""
+    pending_transfer_target = False
+    current_program = current_plan = ""
+
+    for idx, ln in enumerate(lines):
+        if not ln:
+            continue
+        if ln.strip() == "Transfer Credits":
+            in_transfer_block = True
+            continue
+
+        mh = TERM_HEADER_RE.match(ln)
+        if mh:
+            year = int(mh.group(1))
+            term = mh.group(2).title()
+            current_term      = f"{year} {term}"
+            current_term_code = _term_to_code(year, term)
+            in_transfer_block = False
+            transfer_from     = ""
+            pending_transfer_target = False
+            current_program   = current_plan = ""
+            continue
+
+        mprog = PROGRAM_RE.match(ln)
+        if mprog:
+            current_program = mprog.group("program").strip()
+            continue
+        mplan = PLAN_RE.match(ln)
+        if mplan:
+            current_plan = mplan.group("plan").strip()
+            continue
+        if any(h in ln for h in SKIP_LINE_HINTS):
+            continue
+
+        if in_transfer_block:
+            mfrom = TRANSFER_FROM_RE.match(ln)
+            if mfrom:
+                transfer_from = mfrom.group("inst").strip()
+                continue
+            mto = TRANSFER_TO_TERM_RE.match(ln)
+            if mto:
+                y = int(mto.group("year"))
+                t = mto.group("term").title()
+                transfer_effective_term = f"{y} {t}"
+                transfer_effective_date = _term_start_date(y, t).isoformat()
+                pending_transfer_target = True
+                continue
+            if pending_transfer_target:
+                mtc = COURSE_TRANSFER_RE.match(ln)
+                if mtc:
+                    y, t = transfer_effective_term.split()
+                    rows.append({
+                        "course_id": mtc.group("course_id").strip(),
+                        "course_name": mtc.group("course_name").strip(),
+                        "term": transfer_effective_term,
+                        "term_code": _term_to_code(int(y), t),
+                        "grade": mtc.group("grade").strip(),
+                        "status": "transfer",
+                        "attempted_credits": mtc.group("attempted").strip(),
+                        "earned_credits": mtc.group("attempted").strip(),
+                        "grade_points": "", "is_transfer": "1",
+                        "transfer_from": transfer_from,
+                        "transfer_effective_term": transfer_effective_term,
+                        "transfer_effective_date": transfer_effective_date,
+                        "program": "", "plan": "", "plan_short": "",
+                    })
+                    pending_transfer_target = False
+                continue
+            minc = INCOMING_TRANSFER_ROW_RE.match(ln)
+            if minc:
+                rows.append({
+                    "course_id": minc.group("course_id").strip(),
+                    "course_name": minc.group("course_name").strip(),
+                    "term": "Transfer", "term_code": "TR",
+                    "grade": minc.group("grade").strip(),
+                    "status": "transfer",
+                    "attempted_credits": minc.group("attempted").strip(),
+                    "earned_credits": minc.group("attempted").strip(),
+                    "grade_points": "", "is_transfer": "1",
+                    "transfer_from": transfer_from,
+                    "transfer_effective_term": "Unknown",
+                    "transfer_effective_date": "",
+                    "program": "", "plan": "", "plan_short": "",
+                })
+            continue
+
+        mc = TRANSCRIPT_COURSE_RE.match(ln)
+        if mc and current_term:
+            grade  = (mc.group("grade") or "").strip()
+            points = mc.group("points").strip()
+            prec   = [p for p in term_positions if p <= idx]
+            is_lat = bool(prec and prec[-1] == latest_term_index)
+            rows.append({
+                "course_id": mc.group("course_id").strip(),
+                "course_name": mc.group("course_name").strip(),
+                "term": current_term, "term_code": current_term_code,
+                "grade": grade,
+                "status": _classify_status(grade or None, points or None, is_lat),
+                "attempted_credits": mc.group("attempted").strip(),
+                "earned_credits": mc.group("earned").strip(),
+                "grade_points": points, "is_transfer": "0",
+                "transfer_from": "", "transfer_effective_term": "",
+                "transfer_effective_date": "",
+                "program": current_program, "plan": current_plan,
+                "plan_short": _infer_plan_short(current_plan) if current_plan else "",
+            })
+        elif REPEAT_FLAG_RE.search(ln):
+            continue
+
+    return rows
+
+
+def convert_pdf_to_csv(pdf_path: Path) -> Path:
+    """Parse a transcript PDF and write a CSV. Returns the CSV path."""
+    lines       = _extract_pdf_text(pdf_path)
+    student_meta = _parse_student_header(lines, source_file=str(pdf_path.name))
+    rows        = _parse_courses(lines)
+    out_path    = pdf_path.with_suffix(".csv")
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    with out_path.open("w", newline="", encoding="utf-8") as f:
+        w = csv.DictWriter(f, fieldnames=TRANSCRIPT_HEADERS)
+        w.writeheader()
+        for r in rows:
+            r_out = r.copy()
+            r_out.update(student_meta)
+            w.writerow({k: r_out.get(k, "") for k in TRANSCRIPT_HEADERS})
+    return out_path
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# STEP 2 — CSV → filled_pathway.csv
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def _term_sort_key(tc: str):
+    """Sort key for term codes like '2025FA' → (2025, 4)."""
+    if not isinstance(tc, str) or len(tc) < 6:
+        return (9999, 9)
+    y = int(tc[:4])
+    t = TC_ORDER.get(tc[4:].upper(), 9)
+    return (y, t)
+
+
+def _attempt_status(row) -> str:
+    st = str(row.get("status", "")).lower().strip()
+    g  = _clean_grade_token(row.get("grade", ""))
+    if st == "transfer" or g == "T":
+        return "passed"
+    if st in {"withdrawn", "w"} or g == "W":
+        return "withdrawn"
+    if st in {"in_progress", "ip", "inprogress"}:
+        return "in_progress"
+    if g in PASS_LETTERS:
+        return "passed"
+    if g:
+        return "failed"
+    return "unknown"
+
+
+def _latest_by_term(df: pd.DataFrame):
+    if df.empty:
+        return pd.Series({})
+    return df.sort_values("term_code", key=lambda s: s.astype(str).map(_term_sort_key)).iloc[-1]
+
+
+def _first_class_year(df: pd.DataFrame):
+    if "term_code" not in df.columns:
+        return None
+    is_tr = pd.Series(False, index=df.index)
+    if "is_transfer" in df.columns:
+        is_tr |= df["is_transfer"].astype(str).str.lower().isin({"1", "true", "t"})
+    if "status" in df.columns:
+        is_tr |= df["status"].astype(str).str.lower().eq("transfer")
+    pool = df.loc[~is_tr, "term_code"].dropna().astype(str)
+    if pool.empty:
+        pool = df["term_code"].dropna().astype(str)
+    if pool.empty:
+        return None
+    return int(sorted(pool, key=_term_sort_key)[0][:4])
+
+
+_REGISTRY_CACHE = None
+
+def _load_registry() -> dict:
+    global _REGISTRY_CACHE
+    if _REGISTRY_CACHE is not None:
+        return _REGISTRY_CACHE
+    p = _resource_path("curricula_registry.json")
+    if p.exists():
+        with open(p, encoding="utf-8") as f:
+            _REGISTRY_CACHE = json.load(f)
+    else:
+        # Built-in fallback so the app works without the JSON
+        _REGISTRY_CACHE = {
+            "ME": {"plan_patterns": ["mechanical engineering", "mech eng"],
+                   "plan_short_values": ["ME"], "has_te": True,
+                   "variants": ["pre2025", "2025plus"], "variant_cutoff_year": 2025},
+            "IE": {"plan_patterns": ["industrial engineering", "indust eng"],
+                   "plan_short_values": ["IE"], "has_te": True,
+                   "variants": ["pre2025", "2025plus"], "variant_cutoff_year": 2025},
+        }
+    return _REGISTRY_CACHE
+
+
+def _infer_major(df: pd.DataFrame) -> str:
+    reg = _load_registry()
+    # Check plan_short first (exact match)
+    if "plan_short" in df.columns:
+        vals = df["plan_short"].dropna().astype(str).str.upper()
+        for key, info in reg.items():
+            for short in info.get("plan_short_values", [key]):
+                if (vals == short.upper()).any():
+                    return key
+    # Fall back to plan text contains
+    plan_vals = df.get("plan", pd.Series(dtype=str)).dropna().astype(str).str.lower()
+    for key, info in reg.items():
+        for pat in info.get("plan_patterns", []):
+            if plan_vals.str.contains(pat.lower(), regex=False).any():
+                return key
+    return "UNKNOWN"
+
+
+def _detect_track(major: str, first_year) -> str:
+    reg = _load_registry()
+    info = reg.get(major)
+    if not info or first_year is None:
+        return "UNKNOWN"
+    variants = info.get("variants", ["default"])
+    cutoff   = info.get("variant_cutoff_year")
+    if cutoff and len(variants) >= 2:
+        period = variants[1] if first_year >= cutoff else variants[0]
+    else:
+        period = variants[0]
+    return f"{major}_{period}"
+
+
+_MINOR_RE = re.compile(
+    r"(?:([A-Za-z][\w ]+?)\s+[Mm]inor|[Mm]inor\s+in\s+([A-Za-z][\w ]+))"
+)
+
+
+def _infer_minor(df: pd.DataFrame):
+    """Detect a minor from plan/program columns.
+    Returns (code, display_name) or None.  code is used for minor_XX.csv lookup."""
+    for col in ["plan", "program", "plan_short"]:
+        if col not in df.columns:
+            continue
+        for val in df[col].dropna().astype(str):
+            m = _MINOR_RE.search(val)
+            if m:
+                name = (m.group(1) or m.group(2) or "").strip().title()
+                if len(name) < 2:
+                    continue
+                # Derive a short file-safe code: uppercase letters/digits only, max 12 chars
+                code = re.sub(r"[^A-Z0-9]", "", name.upper())[:12]
+                if not code:
+                    code = "MINOR"
+                return (code, name)
+    return None
+
+
+def _parse_pool_req(req_str):
+    """Parse pool_requirement like '2 courses' or '9 credits'. Returns (type, count)."""
+    s = str(req_str or "").strip().lower()
+    m = re.match(r"(\d+)\s*(course|credit)", s)
+    if m:
+        return (m.group(2) + "s", int(m.group(1)))
+    return ("courses", 1)
+
+
+def _process_minor(minor_csv_path, tx: pd.DataFrame, ever_met_min: set,
+                   minor_code: str, minor_display_name: str, track: str) -> list:
+    """Match student courses to a minor CSV. Returns list of row dicts."""
+    mc = pd.read_csv(str(minor_csv_path), engine="python")
+    for col in ["slot_type", "course_id", "course_name", "credits",
+                "pool_id", "pool_label", "pool_requirement", "prereq", "coreq", "min_grade", "notes"]:
+        if col not in mc.columns:
+            mc[col] = ""
+    mc["course_id_norm"] = mc["course_id"].astype(str).map(norm_id)
+
+    tx = tx.copy()
+    if "course_id_norm" not in tx.columns:
+        tx["course_id_norm"] = tx["course_id"].map(norm_id)
+    if "grade_tok" not in tx.columns:
+        tx["grade_tok"] = tx["grade"].map(_clean_grade_token)
+    if "attempt_status" not in tx.columns:
+        tx["attempt_status"] = tx.apply(_attempt_status, axis=1)
+
+    # Pre-compute pool stats: for each pool_id, how many student courses are satisfied
+    pool_stats = {}  # pool_id -> {"done": int, "needed": int, "count_type": str, "label": str}
+    for pool_id, grp in mc[mc["slot_type"].str.lower().str.strip() == "pool"].groupby("pool_id"):
+        ct, cn = _parse_pool_req(grp["pool_requirement"].iloc[0])
+        pool_cids = set(grp["course_id_norm"])
+        taken = tx[tx["course_id_norm"].isin(pool_cids) &
+                   tx["attempt_status"].isin(["passed", "in_progress", "transfer"])]
+        if ct == "credits":
+            done_val = tx.loc[
+                tx["course_id_norm"].isin(pool_cids) &
+                tx["attempt_status"].isin(["passed", "transfer"]),
+                "earned_credits"
+            ].fillna(0).astype(float).sum()
+        else:
+            done_val = len(taken["course_id_norm"].unique())
+        label_val = str(grp["pool_label"].iloc[0]).strip()
+        pool_stats[pool_id] = {"done": done_val, "needed": cn, "count_type": ct,
+                               "total_avail": len(pool_cids), "label": label_val}
+
+    out_rows = []
+    for _, row in mc.iterrows():
+        slot_type = str(row.get("slot_type", "required")).lower().strip() or "required"
+        cidn      = row["course_id_norm"]
+        pool_id   = str(row.get("pool_id", "")).strip()
+
+        att = tx[tx["course_id_norm"] == cidn].copy()
+        match_grade = match_term = match_cid = match_cname = match_status = ""
+        meets_min = ""
+        if not att.empty:
+            meets = att[att["grade_tok"].map(
+                lambda g: grade_meets_min(g, str(row.get("min_grade", ""))))]
+            chosen = _latest_by_term(meets) if not meets.empty else _latest_by_term(att)
+            if not chosen.empty:
+                match_cid    = str(chosen.get("course_id", ""))
+                match_cname  = str(chosen.get("course_name", ""))
+                match_term   = str(chosen.get("term_code", ""))
+                match_grade  = str(chosen.get("grade", ""))
+                ok           = grade_meets_min(match_grade, str(row.get("min_grade", "")))
+                match_status = chosen.get("attempt_status", "unknown") if ok else "below_min_grade"
+                meets_min    = "Y" if ok else "N"
+
+        pre = str(row.get("prereq", "")).upper().strip()
+        prereqs_ok = True
+        if pre:
+            found_pres = re.findall(r"[A-Z]{2,}\.? ?\d{3,4}", pre)
+            if found_pres:
+                prereqs_ok = all(norm_id(c) in ever_met_min for c in found_pres)
+
+        ps = pool_stats.get(pool_id, {})
+        filled = {
+            "term_id": "MINOR", "term_label": f"{minor_display_name} Minor",
+            "slot_course_id":   str(row.get("course_id", "")),
+            "slot_course_name": str(row.get("course_name", "")),
+            "credits":          str(row.get("credits", "")),
+            "bucket":           f"Minor_{minor_code}",
+            "prereq":           str(row.get("prereq", "")),
+            "coreq":            str(row.get("coreq", "")),
+            "min_grade":        str(row.get("min_grade", "")),
+            "notes":            str(row.get("notes", "")),
+            "minor_slot_type":       slot_type,
+            "minor_pool_id":         pool_id,
+            "minor_pool_requirement": str(row.get("pool_requirement", "")),
+            "minor_pool_slots_done":   ps.get("done", 0),
+            "minor_pool_slots_needed": ps.get("needed", 1),
+            "minor_pool_count_type":   ps.get("count_type", "courses"),
+            "minor_pool_total_avail":  ps.get("total_avail", 0),
+            "match_course_id":   match_cid,
+            "match_course_name": match_cname,
+            "match_term_code":   match_term,
+            "match_grade":       match_grade,
+            "match_status":      match_status,
+            "meets_min_grade":   meets_min,
+            "prereqs_met_flag":  "Y" if prereqs_ok else "N",
+            "source_track":      track,
+        }
+
+        has_grade = match_grade.strip() not in ("", "nan")
+        has_term  = match_term.strip() not in ("", "nan")
+        if has_term and not has_grade:
+            filled["viz_status"] = "blue"
+        elif meets_min == "Y" or match_status in ("passed", "transfer"):
+            filled["viz_status"] = "green"
+        elif match_status == "below_min_grade":
+            filled["viz_status"] = "yellow"
+        elif prereqs_ok:
+            filled["viz_status"] = "yellow"
+        else:
+            filled["viz_status"] = "grey"
+
+        out_rows.append(filled)
+    return out_rows
+
+
+def _best_attempts(tx: pd.DataFrame) -> pd.DataFrame:
+    df = tx.copy()
+    df["course_id_norm"] = df["course_id"].map(norm_id)
+    if "attempt_status" not in df.columns:
+        df["attempt_status"] = df.apply(_attempt_status, axis=1)
+    # Count failed/withdrawn attempts per course before deduplicating
+    fail_counts = (
+        df[df["attempt_status"].isin({"failed", "withdrawn"})]
+        .groupby("course_id_norm")
+        .size()
+        .rename("prior_fail_count")
+    )
+    df["__prio"] = df["attempt_status"].map(STATUS_PRIO).fillna(0)
+    df["__y"]   = df["term_code"].astype(str).map(lambda s: _term_sort_key(s)[0])
+    df["__t"]   = df["term_code"].astype(str).map(lambda s: _term_sort_key(s)[1])
+    df = df.sort_values(["course_id_norm", "__prio", "__y", "__t"],
+                        ascending=[True, False, True, True])
+    best = df.drop_duplicates("course_id_norm", keep="first").drop(columns=["__prio", "__y", "__t"])
+    best = best.join(fail_counts, on="course_id_norm")
+    best["prior_fail_count"] = best["prior_fail_count"].fillna(0).astype(int)
+    return best.set_index("course_id_norm")
+
+
+def _pick_curriculum_csv(track: str):
+    """Find curriculum_{track}.csv using registry naming convention."""
+    if not track or track == "UNKNOWN":
+        return None
+    fname = f"curriculum_{track}.csv"
+    p = _resource_path(fname)
+    return p if p.exists() else None
+
+
+def _load_catalog_ids(csv_path: Path) -> set:
+    if not csv_path.exists():
+        return set()
+    df = pd.read_csv(csv_path, engine="python")
+    col = "course_id" if "course_id" in df.columns else df.columns[0]
+    return set(df[col].dropna().astype(str).map(norm_id))
+
+
+def _choose_bucket_assignment(candidates_df: pd.DataFrame, allowed_ids: set, used: set):
+    if candidates_df.empty or not allowed_ids:
+        return None
+    pool = candidates_df[candidates_df["course_id_norm"].isin(allowed_ids)]
+    if pool.empty:
+        return None
+    pool = pool.sort_values(
+        ["attempt_status", "term_code"],
+        ascending=[False, True],
+        key=lambda c: c.map(STATUS_PRIO) if c.name == "attempt_status" else c.map(_term_sort_key),
+    )
+    for cid in pool["course_id_norm"]:
+        if cid not in used:
+            return cid
+    return None
+
+
+def _te_catalog_path(major: str):
+    fname = f"{major}_TE.csv"
+    p = _resource_path(fname)
+    return p if p.exists() else None
+
+
+def _load_te_ids(csv_path) -> set:
+    if not csv_path or not Path(csv_path).exists():
+        return set()
+    df = pd.read_csv(csv_path, engine="python")
+    col = "course_id" if "course_id" in df.columns else df.columns[0]
+    ids = df[col].dropna().astype(str).map(norm_id)
+    if "category" in df.columns:
+        ids = ids[df["category"].astype(str).str.strip().str.lower().eq("techelective")]
+    return set(ids)
+
+
+def _load_te_rules(path=None):
+    if path is None:
+        path = _resource_path("TE_Rules.csv")
+    path = Path(path)
+    if not path.exists():
+        return None
+    df = pd.read_csv(path, engine="python")
+    for c in ["major", "rule_type", "value", "effect", "applies_to_bucket", "priority"]:
+        if c not in df.columns:
+            df[c] = ""
+    df["priority"] = pd.to_numeric(df["priority"], errors="coerce").fillna(0).astype(int)
+    df["major"]    = df["major"].astype(str).str.upper().str.strip()
+    df["rule_type"] = df["rule_type"].astype(str).str.lower().str.strip()
+    df["effect"]   = df["effect"].astype(str).str.lower().str.strip()
+    df["applies_to_bucket"] = df["applies_to_bucket"].astype(str).str.strip()
+    df["value"]    = df["value"].astype(str)
+    return df
+
+
+def _te_allowed(course_id_norm: str, major: str, rules_df) -> bool:
+    if rules_df is None:
+        return True
+    rsub = rules_df[
+        (rules_df["major"].isin([major.upper(), ""])) &
+        (rules_df["applies_to_bucket"].isin(["TechElective", ""]))
+    ].copy()
+    if rsub.empty:
+        return True
+    rsub = rsub.sort_values("priority", ascending=False)
+    for _, r in rsub.iterrows():
+        rt, val = r["rule_type"], str(r["value"])
+        if rt == "course_id":
+            if norm_id(val) == course_id_norm:
+                return r["effect"] != "ban"
+        elif rt == "prefix":
+            pref = norm_id(val).split(" ")[0]
+            if course_id_norm.startswith(pref + " "):
+                return r["effect"] != "ban"
+        elif rt == "regex":
+            try:
+                if re.search(val, course_id_norm):
+                    return r["effect"] != "ban"
+            except re.error:
+                continue
+    return True
+
+
+def fill_pathway(transcript_csv: Path) -> Path:
+    """Map transcript courses to curriculum slots. Returns filled_pathway CSV path."""
+    tx = pd.read_csv(transcript_csv, engine="python")
+    if "course_id" not in tx.columns:
+        raise ValueError("Transcript missing 'course_id' column.")
+
+    tx["course_id_norm"] = tx["course_id"].map(norm_id)
+    tx["grade_tok"]      = tx["grade"].map(_clean_grade_token)
+    tx["attempt_status"] = tx.apply(_attempt_status, axis=1)
+
+    major      = _infer_major(tx)
+    start_year = _first_class_year(tx)
+    track      = _detect_track(major, start_year)
+
+    cur_path = _pick_curriculum_csv(track)
+    if cur_path is None:
+        raise FileNotFoundError(f"No curriculum CSV found for track '{track}'.")
+    cur = pd.read_csv(cur_path, engine="python")
+    for c in ["term_id", "term_label", "course_id", "course_name", "credits",
+              "bucket", "prereq", "coreq", "min_grade", "notes"]:
+        if c not in cur.columns:
+            cur[c] = ""
+    cur["course_id_norm"] = cur["course_id"].map(norm_id)
+
+    best_map = _best_attempts(tx)
+
+    ah_ids   = _load_catalog_ids(_resource_path("AHelectives.csv"))
+    ss_ids   = _load_catalog_ids(_resource_path("SSelectives.csv"))
+    te_ids   = _load_te_ids(_te_catalog_path(major))
+    te_rules = _load_te_rules(_resource_path("TE_Rules.csv"))
+    if te_ids:
+        te_ids = {cid for cid in te_ids if _te_allowed(cid, major, te_rules)}
+
+    tx_usable = tx[tx["attempt_status"].isin(["passed", "in_progress"])].copy()
+
+    out_rows = []
+    for _, row in cur.iterrows():
+        cidn   = row["course_id_norm"]
+        bucket = str(row.get("bucket", "")).strip()
+        filled = {
+            "term_id": row["term_id"], "term_label": row["term_label"],
+            "slot_course_id": row["course_id"], "slot_course_name": row["course_name"],
+            "credits": row.get("credits", ""), "bucket": bucket,
+            "prereq": row.get("prereq", ""), "coreq": row.get("coreq", ""),
+            "min_grade": row.get("min_grade", ""), "notes": row.get("notes", ""),
+            "match_course_id": "", "match_course_name": "",
+            "match_term_code": "", "match_grade": "",
+            "match_status": "open", "meets_min_grade": "",
+            "prior_fail_count": 0,
+            "source_track": track,
+        }
+        if bucket not in {"GENED_AH", "GENED_SS", "TechElective"}:
+            att = tx[tx["course_id_norm"] == cidn].copy()
+            if att.empty and not re.search(r"[A-Z]$", cidn):
+                # Fallback: match transcript IDs that have a letter suffix but otherwise
+                # equal this slot (e.g., "ENGL 1010S" matches curriculum slot "ENGL 1010").
+                # Only applies when the slot itself has no letter suffix (avoiding labs like PHYS 1410L).
+                base_norm = tx["course_id_norm"].str.replace(r"(?<=[0-9]{4})[A-Z]+$", "", regex=True)
+                att = tx[base_norm == cidn].copy()
+            if not att.empty:
+                meets  = att[att["grade_tok"].map(lambda g: grade_meets_min(g, row.get("min_grade", "")))]
+                chosen = _latest_by_term(meets) if not meets.empty else _latest_by_term(att)
+                if not chosen.empty:
+                    raw_grade = chosen.get("grade", "")
+                    # Sanitize: NaN from pandas must become empty string, not "nan"
+                    if raw_grade is None or (isinstance(raw_grade, float) and pd.isna(raw_grade)):
+                        raw_grade = ""
+                    raw_grade = str(raw_grade).strip()
+                    if raw_grade.lower() in ("nan", "none"):
+                        raw_grade = ""
+                    chosen_status = str(chosen.get("attempt_status", "unknown")).lower()
+                    filled["match_course_id"]   = chosen.get("course_id", "")
+                    filled["match_course_name"] = chosen.get("course_name", "")
+                    filled["match_term_code"]   = chosen.get("term_code", "")
+                    filled["match_grade"]       = raw_grade
+                    if chosen_status == "in_progress":
+                        filled["match_status"]    = "in_progress"
+                        filled["meets_min_grade"] = ""
+                    else:
+                        ok = grade_meets_min(raw_grade, row.get("min_grade", ""))
+                        filled["match_status"]    = chosen_status if ok else "below_min_grade"
+                        filled["meets_min_grade"] = "Y" if ok else "N"
+        if cidn in best_map.index and "prior_fail_count" in best_map.columns:
+            pfc = best_map.loc[cidn, "prior_fail_count"]
+            filled["prior_fail_count"] = int(pfc) if pd.notna(pfc) else 0
+        out_rows.append(filled)
+
+    filled_df = pd.DataFrame(out_rows)
+
+    used_bucket_ids = set()
+    fixed_matched = set(best_map.index).intersection(
+        set(filled_df.loc[filled_df["match_status"] != "open", "slot_course_id"].map(norm_id))
+    )
+    used_bucket_ids |= fixed_matched
+
+    for idx in filled_df.index[filled_df["bucket"].isin(["GENED_AH", "GENED_SS"])]:
+        bucket   = filled_df.at[idx, "bucket"]
+        allowed  = ah_ids if bucket == "GENED_AH" else ss_ids
+        chosen_n = _choose_bucket_assignment(tx_usable, allowed, used_bucket_ids)
+        if chosen_n:
+            b = best_map.loc[chosen_n]
+            filled_df.loc[idx, ["match_course_id", "match_course_name",
+                                 "match_term_code", "match_grade", "match_status"]] = [
+                b.get("course_id", ""), b.get("course_name", ""),
+                b.get("term_code", ""), b.get("grade", ""), b.get("attempt_status", "unknown"),
+            ]
+            used_bucket_ids.add(chosen_n)
+
+    if te_ids:
+        te_allowed_tx = {cid for cid in tx_usable["course_id_norm"].unique()
+                         if cid in te_ids and _te_allowed(cid, major, te_rules)}
+        te_row_idx = filled_df.index[filled_df["bucket"].eq("TechElective")]
+        used_bucket_ids |= set(filled_df.loc[filled_df["match_status"] != "open",
+                                              "match_course_id"].map(norm_id))
+        for idx in te_row_idx:
+            chosen_n = _choose_bucket_assignment(tx_usable, te_allowed_tx, used_bucket_ids)
+            if not chosen_n:
+                continue
+            b = best_map.loc[chosen_n]
+            filled_df.loc[idx, ["match_course_id", "match_course_name",
+                                 "match_term_code", "match_grade", "match_status"]] = [
+                b.get("course_id", ""), b.get("course_name", ""),
+                b.get("term_code", ""), b.get("grade", ""), b.get("attempt_status", "unknown"),
+            ]
+            used_bucket_ids.add(chosen_n)
+
+    # unmapped
+    curriculum_fixed = set(cur.loc[~cur["bucket"].isin(
+        ["GENED_AH", "GENED_SS", "TechElective"]), "course_id_norm"])
+    assigned = set(filled_df.loc[filled_df["match_status"] != "open",
+                                  "match_course_id"].map(norm_id))
+    tx_unmapped = tx_usable[
+        (~tx_usable["course_id_norm"].isin(curriculum_fixed)) &
+        (~tx_usable["course_id_norm"].isin(assigned))
+    ]
+    unmapped_rows = []
+    for _, r in tx_unmapped.sort_values(["course_id_norm", "term_code"]).iterrows():
+        unmapped_rows.append({
+            "term_id": "UNMAPPED", "term_label": "Unmapped from Transcript",
+            "slot_course_id": "", "slot_course_name": "", "credits": "", "bucket": "",
+            "prereq": "", "coreq": "", "min_grade": "", "notes": "",
+            "match_course_id": r.get("course_id", ""), "match_course_name": r.get("course_name", ""),
+            "match_term_code": r.get("term_code", ""), "match_grade": r.get("grade", ""),
+            "match_status": r.get("attempt_status", ""), "source_track": track,
+        })
+
+    filled_df["__order"] = 1
+    if unmapped_rows:
+        unmapped_df = pd.DataFrame(unmapped_rows)
+        unmapped_df["__order"] = 0
+        combined = pd.concat([unmapped_df, filled_df], ignore_index=True)
+    else:
+        combined = filled_df
+
+    combined = combined.sort_values(
+        ["__order", "term_id", "slot_course_id"], ascending=[True, True, True]
+    ).drop(columns="__order")
+
+    # prereq flags
+    min_by_course = (
+        cur.loc[~cur["bucket"].isin(["GENED_AH", "GENED_SS", "TechElective"]),
+                ["course_id_norm", "min_grade"]]
+        .set_index("course_id_norm")["min_grade"].to_dict()
+    )
+    ever_met_min = set()
+    for _, r in tx.iterrows():
+        cidn = r.get("course_id_norm", "")
+        if not cidn:
+            continue
+        if grade_meets_min(r.get("grade_tok", ""), min_by_course.get(cidn, "")):
+            ever_met_min.add(cidn)
+    ever_met_min |= set(tx.loc[tx["attempt_status"].isin(["passed", "transfer"]),
+                                "course_id_norm"])
+
+    def _prereq_check(row) -> str:
+        pre = str(row.get("prereq", "")).upper().strip()
+        if not pre:
+            return "Y"
+        found = re.findall(r"[A-Z]{2,}\.? ?\d{3,4}", pre)
+        if not found:
+            return "Y"
+        return "Y" if all(norm_id(c) in ever_met_min for c in found) else "N"
+
+    combined["prereqs_met_flag"] = combined.apply(_prereq_check, axis=1)
+
+    # viz status
+    def _viz(row) -> str:
+        has_term   = str(row.get("match_term_code", "")).strip() not in ("", "nan", "none")
+        grade_raw  = str(row.get("match_grade", "")).strip().lower()
+        has_grade  = grade_raw not in ("", "nan", "none")
+        mstatus    = str(row.get("match_status", "")).lower().strip()
+        min_g      = _clean_grade_token(row.get("min_grade", ""))
+        prereqs_ok = str(row.get("prereqs_met_flag", "")).upper() == "Y"
+        passed     = has_grade and grade_meets_min(row.get("match_grade", ""), min_g)
+        taken_pass = passed or mstatus in {"passed", "transfer", "completed"}
+        if mstatus == "in_progress" or (has_term and not has_grade):
+            return "blue"
+        if taken_pass:
+            return "green"
+        if has_grade and not passed:
+            return "amber"   # taken but did not meet min grade
+        if not has_term and not prereqs_ok:
+            return "grey"
+        if prereqs_ok:
+            return "yellow"  # not yet taken, prereqs met
+        return "grey"
+
+    combined["viz_status"] = combined.apply(_viz, axis=1)
+
+    # Second pass: mark courses that would be unlocked next semester if in-progress pass
+    inprog_ids = set(
+        combined.loc[combined["viz_status"] == "blue", "match_course_id"]
+        .dropna().astype(str).map(norm_id)
+    ) - {"", "nan"}
+    if inprog_ids:
+        future_met = ever_met_min | inprog_ids
+        grey_mask = combined["viz_status"] == "grey"
+        for idx in combined.index[grey_mask]:
+            pre_str = str(combined.at[idx, "prereq"]).upper()
+            prereq_ids_found = re.findall(r"[A-Z]{2,}\.? ?\d{3,4}", pre_str)
+            if prereq_ids_found and all(norm_id(c) in future_met for c in prereq_ids_found):
+                combined.at[idx, "viz_status"] = "next_eligible"
+
+    # ── minor detection & processing ──────────────────────────────────────────
+    minor_info = _infer_minor(tx)
+    if minor_info:
+        minor_code, minor_display_name = minor_info
+        minor_csv = _resource_path(f"minor_{minor_code}.csv")
+        if minor_csv.exists():
+            minor_rows = _process_minor(minor_csv, tx, ever_met_min,
+                                        minor_code, minor_display_name, track)
+            if minor_rows:
+                minor_df = pd.DataFrame(minor_rows)
+                combined = pd.concat([combined, minor_df], ignore_index=True)
+        else:
+            placeholder = {c: "" for c in combined.columns}
+            placeholder.update({
+                "term_id": "MINOR", "term_label": f"{minor_display_name} Minor",
+                "slot_course_name": f"⚠ minor_{minor_code}.csv not found — create it to track minor",
+                "bucket": f"Minor_{minor_code}",
+                "viz_status": "grey", "source_track": track,
+            })
+            combined = pd.concat([combined, pd.DataFrame([placeholder])], ignore_index=True)
+
+    # ── propagate student identity into every row ──────────────────────────────
+    _sname = ""
+    for _col in ["full_name", "student_name"]:
+        if _col in tx.columns:
+            _vals = tx[_col].dropna().astype(str)
+            _vals = _vals[_vals.str.strip().ne("") & _vals.str.lower().ne("nan")]
+            if not _vals.empty:
+                _sname = _vals.iloc[0]; break
+    _sid = ""
+    if "student_id" in tx.columns:
+        _sv = tx["student_id"].dropna()
+        if not _sv.empty:
+            _sid = str(_sv.iloc[0])
+    combined["student_name"]       = _sname
+    combined["student_id"]         = _sid
+    combined["student_start_year"] = start_year if start_year else ""
+
+    out_path = transcript_csv.with_suffix(".filled_pathway.csv")
+    combined.to_csv(out_path, index=False)
+    return out_path
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# STEP 3 — filled_pathway.csv → self-contained HTML
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def _canonical_term(term_id: str, term_label: str):
+    """Convert term_id / term_label to canonical key like Y1F, Y2S, …"""
+    tid = str(term_id or "").strip().upper()
+    if re.match(r"Y[1-4][FS]$", tid):
+        return tid
+    label = str(term_label or "").lower()
+    ymap  = {"freshman": 1, "sophomore": 2, "junior": 3, "senior": 4,
+             "year 1": 1, "year 2": 2, "year 3": 3, "year 4": 4}
+    smap  = {"fall": "F", "spring": "S"}
+    y = next((v for k, v in ymap.items() if k in label), None)
+    s = next((v for k, v in smap.items() if k in label), None)
+    return f"Y{y}{s}" if y and s else None
+
+
+def _html_box_status(row: dict) -> str:
+    """Return one of: completed | inprog | belowmin | eligible | locked"""
+    taken   = str(row.get("taken_flag",   "")).upper() == "Y"
+    inprog  = str(row.get("in_progress_flag", "")).upper() == "Y"
+    passes  = str(row.get("meets_min_grade", "")).upper() == "Y"
+    prereq  = (str(row.get("prereqs_met_flag",      "")).upper() == "Y" or
+               str(row.get("prerequisite_met_flag", "")).upper() == "Y")
+    status  = str(row.get("match_status", "")).lower().strip()
+    grade   = str(row.get("match_grade", "")).strip()
+    viz     = str(row.get("viz_status", "")).lower().strip()
+
+    # Use viz_status when present (it's the authoritative field from Step 2)
+    if viz == "green":
+        return "completed"
+    if viz == "blue":
+        return "inprog"
+    if viz == "yellow":
+        return "eligible"
+    if viz in ("amber", "yellow_taken"):
+        return "belowmin"
+    if viz == "grey":
+        return "locked"
+    if viz == "next_eligible":
+        return "nextelig"
+
+    # Fallback: derive from flags
+    if inprog or status == "in_progress":
+        return "inprog"
+    if taken or status in {"passed", "transfer", "completed"}:
+        if grade and not passes:
+            return "belowmin"
+        return "completed"
+    return "eligible" if prereq else "locked"
+
+
+def build_cpr_table(df: pd.DataFrame) -> str:
+    """Build a printable CPR table (Fall | Spring side-by-side per year)."""
+    year_names   = {1: "Freshman Year", 2: "Sophomore Year", 3: "Junior Year", 4: "Senior Year"}
+    bucket_class = {"GENED_AH": "row-ah", "GENED_SS": "row-ss", "TechElective": "row-te"}
+
+    # Group all curriculum slots (including electives) by term
+    grid_all = {t: [] for t in TERM_ORDER_HTML}
+    for _, r in df.iterrows():
+        row = r.to_dict()
+        if str(row.get("term_id", "")).upper() == "UNMAPPED":
+            continue
+        if not str(row.get("slot_course_id", "")).strip():
+            continue
+        tk = _canonical_term(str(row.get("term_id", "")), str(row.get("term_label", "")))
+        if tk in grid_all:
+            grid_all[tk].append(row)
+
+    def _fmt_cr(v):
+        try:
+            f = float(str(v or "0"))
+            return str(int(f)) if f == int(f) else str(f)
+        except Exception:
+            return str(v)
+
+    def make_cells(row):
+        if row is None:
+            return '<td></td><td></td><td class="cr"></td><td class="t-grade"></td><td class="term-col"></td>'
+        cid        = norm_id(row.get("slot_course_id", ""))
+        cname      = str(row.get("slot_course_name", "")).strip()
+        creds      = _fmt_cr(row.get("credits", ""))
+        grade      = str(row.get("match_grade", "")).strip()
+        term_taken = str(row.get("match_term_code", "")).strip()
+        min_g      = str(row.get("min_grade", "")).strip()
+        status     = _html_box_status(row)
+        cid_cls    = "cid-req" if min_g and min_g.upper() not in ("", "NAN") else ""
+        sc         = f"cell-{status}"
+
+        # Grade display — clean up "nan" values
+        grade_disp = grade if grade and grade.lower() != "nan" else ""
+
+        # Status badge shown inline with course name
+        badge = ""
+        if status == "eligible":
+            badge = ' <span class="badge badge-next">\u2192 Up Next</span>'
+        elif status == "inprog":
+            badge = ' <span class="badge badge-inprog">In Progress</span>'
+        elif status == "belowmin":
+            badge = ' <span class="badge badge-belowmin">Below Min</span>'
+
+        return (
+            f'<td class="t-cid {cid_cls} {sc}" data-slot-cid="{cid}">{cid}</td>'
+            f'<td class="t-name {sc}">{cname}{badge}</td>'
+            f'<td class="cr {sc}">{creds}</td>'
+            f'<td class="t-grade {sc}">{grade_disp}</td>'
+            f'<td class="term-col {sc}">{term_taken}</td>'
+        )
+
+    body = ""
+    total_all = 0.0
+
+    for y in range(1, 5):
+        fall_rows   = grid_all[f"Y{y}F"]
+        spring_rows = grid_all[f"Y{y}S"]
+        n = max(len(fall_rows), len(spring_rows), 1)
+
+        body += (
+            f'<tr class="year-label-row"><td colspan="11">{year_names[y]}</td></tr>'
+            f'<tr class="sem-hdr-row">'
+            f'<th class="t-cid">Course</th><th class="t-name">Fall</th>'
+            f'<th class="cr">Cr.</th><th class="t-grade">Grade</th><th class="term-col">Term</th>'
+            f'<th class="sep"></th>'
+            f'<th class="t-cid">Course</th><th class="t-name">Spring</th>'
+            f'<th class="cr">Cr.</th><th class="t-grade">Grade</th><th class="term-col">Term</th>'
+            f'</tr>'
+        )
+
+        fall_total = spring_total = 0.0
+        for i in range(n):
+            fr = fall_rows[i]   if i < len(fall_rows)   else None
+            sr = spring_rows[i] if i < len(spring_rows) else None
+            fb = str((fr or {}).get("bucket", ""))
+            sb = str((sr or {}).get("bucket", ""))
+            row_cls = bucket_class.get(fb or sb, "")
+            body += f'<tr class="course-row {row_cls}">{make_cells(fr)}<td class="sep"></td>{make_cells(sr)}</tr>'
+            for row, which in [(fr, "f"), (sr, "s")]:
+                if row:
+                    try:
+                        v = float(str(row.get("credits", "0") or "0"))
+                        if which == "f":
+                            fall_total += v
+                        else:
+                            spring_total += v
+                    except Exception:
+                        pass
+
+        body += (
+            f'<tr class="total-row">'
+            f'<td colspan="2" class="total-label">Total</td>'
+            f'<td class="cr total-val">{_fmt_cr(fall_total)}</td><td></td><td></td>'
+            f'<td class="sep"></td>'
+            f'<td colspan="2" class="total-label">Total</td>'
+            f'<td class="cr total-val">{_fmt_cr(spring_total)}</td><td></td><td></td>'
+            f'</tr>'
+        )
+        total_all += fall_total + spring_total
+
+    body += (
+        f'<tr class="grand-total-row">'
+        f'<td colspan="6"></td>'
+        f'<td colspan="5">Total Required Credits: {_fmt_cr(total_all)}</td>'
+        f'</tr>'
+    )
+
+    return (
+        f'<div id="cpr-table-section">'
+        f'<h2 class="table-title">Curriculum Progress \u2014 Table View</h2>'
+        f'<table class="cpr-table"><tbody>{body}</tbody></table>'
+        f'</div>'
+    )
+
+
+def build_html(df: pd.DataFrame) -> str:
+    # ── metadata ──────────────────────────────────────────────────────────────
+    def find_col(target):
+        tgt = target.replace("_", "").replace(" ", "").lower()
+        for c in df.columns:
+            if str(c).replace("_", "").replace(" ", "").lower() == tgt:
+                return c
+        return None
+
+    def first_nonempty(col):
+        if col is None:
+            return None
+        s = df[col].astype(str).str.strip()
+        s = s[~s.str.lower().isin(["", "nan", "none"])]
+        return s.iloc[0] if not s.empty else None
+
+    student_name = first_nonempty(find_col("student_name") or find_col("full_name")) or "Student"
+    major        = first_nonempty(find_col("source_track") or find_col("plan_short") or
+                                   find_col("plan")) or "—"
+    ssy_col = find_col("student_start_year")
+    if ssy_col:
+        _syv = df[ssy_col].dropna().astype(str).str.strip()
+        _syv = _syv[_syv.ne("") & _syv.ne("nan")]
+        start_year = _syv.iloc[0] if not _syv.empty else "—"
+    else:
+        start_year = "—"
+        for cand in ["match_term_code", "term_code", "term_label", "term"]:
+            col = find_col(cand)
+            if col:
+                years = df[col].dropna().astype(str).str.extract(r"(\d{4})")[0].dropna()
+                if not years.empty:
+                    start_year = int(years.astype(int).min())
+                break
+
+    # ── sort rows ─────────────────────────────────────────────────────────────
+    grid     = {t: [] for t in TERM_ORDER_HTML}
+    elects   = {"GENED_AH": [], "GENED_SS": [], "TechElective": []}
+    minors   = {}   # minor_code -> {"display_name": str, "rows": list, "pools": dict}
+    unmapped = []
+
+    for _, r in df.iterrows():
+        row    = r.to_dict()
+        bucket = str(row.get("bucket", "")).strip()
+        tk     = _canonical_term(str(row.get("term_id", "")), str(row.get("term_label", "")))
+        if bucket.startswith("Minor_"):
+            mcode = bucket[len("Minor_"):]
+            if mcode not in minors:
+                dname = str(row.get("term_label", mcode + " Minor")).replace(" Minor", "").strip()
+                minors[mcode] = {"display_name": dname, "rows": [], "pools": {}}
+            minors[mcode]["rows"].append(row)
+            # Collect pool stats once per pool_id
+            pid = str(row.get("minor_pool_id", "")).strip()
+            if pid and pid not in minors[mcode]["pools"]:
+                minors[mcode]["pools"][pid] = {
+                    "done":       row.get("minor_pool_slots_done", 0),
+                    "needed":     row.get("minor_pool_slots_needed", 1),
+                    "count_type": row.get("minor_pool_count_type", "courses"),
+                    "total_avail":row.get("minor_pool_total_avail", 0),
+                }
+        elif bucket in ELECTIVE_BUCKETS:
+            elects[bucket].append(row)
+        elif tk in grid:
+            grid[tk].append(row)
+        else:
+            unmapped.append(row)
+
+    # ── course box renderer ───────────────────────────────────────────────────
+    def course_box(row: dict) -> str:
+        cid   = norm_id(row.get("slot_course_id", ""))
+        cname = str(row.get("slot_course_name", "")).strip() or "(Unnamed)"
+        creds = str(row.get("credits", "")).strip()
+        grade = str(row.get("match_grade", "")).strip()
+        prereq_ids = json.dumps(extract_course_ids(str(row.get("prereq", ""))))
+        coreq_ids  = json.dumps(extract_course_ids(str(row.get("coreq",  ""))))
+        status  = _html_box_status(row)
+        elem_id = css_id(cid) if cid else "c-" + re.sub(r"\W+", "-", cname)[:20]
+        grade_h = f'<span class="grade">{grade}</span>' if grade not in ("", "nan") else ""
+        creds_h = f'<span class="credits">{creds} cr</span>' if creds not in ("", "nan") else ""
+        n_dots = min(int(row.get("prior_fail_count", 0) or 0), 4)
+        dots_h = ('<div class="attempt-dots">' + '<span class="attempt-dot"></span>' * n_dots + '</div>') if n_dots > 0 else ""
+        return (
+            f'<div class="course-box {status}" id="{elem_id}" '
+            f'data-cid="{cid}" data-prereqs=\'{prereq_ids}\' data-coreqs=\'{coreq_ids}\' '
+            f'data-orig-status="{status}" data-orig-cid="{cid}" data-orig-cname="{cname}">'
+            f'<div class="cid">{cid}</div>'
+            f'<div class="cname">{cname}</div>'
+            f'<div class="meta">{creds_h}{grade_h}</div>'
+            f'{dots_h}'
+            f'</div>'
+        )
+
+    # ── grid ──────────────────────────────────────────────────────────────────
+    grid_html = ""
+    for y in range(1, 5):
+        terms_html = ""
+        for s in ["F", "S"]:
+            key   = f"Y{y}{s}"
+            boxes = "".join(course_box(r) for r in grid[key]) or '<div class="empty-slot">—</div>'
+            terms_html += (
+                f'<div class="semester" id="sem-{key}">'
+                f'<div class="sem-header">{SEM_LABELS[s]}</div>'
+                f'{boxes}</div>'
+            )
+        grid_html += (
+            f'<div class="year-group" id="year-{y}">'
+            f'<div class="year-header">{YEAR_LABELS[y]}</div>'
+            f'<div class="semesters">{terms_html}</div></div>'
+        )
+
+    # ── electives ─────────────────────────────────────────────────────────────
+    bucket_labels = {"GENED_AH": "Arts & Humanities",
+                     "GENED_SS": "Social Science",
+                     "TechElective": "Tech Electives"}
+    elects_inner = ""
+    for bucket, rows in elects.items():
+        if not rows:
+            continue
+        boxes = "".join(course_box(r) for r in rows)
+        elects_inner += (
+            f'<div class="elective-group">'
+            f'<div class="elective-header">{bucket_labels[bucket]}</div>'
+            f'<div class="elective-boxes">{boxes}</div></div>'
+        )
+    elects_html = (f'<div id="electives"><div class="elects-inner">{elects_inner}</div></div>'
+                   if elects_inner else "")
+
+    # ── minors ────────────────────────────────────────────────────────────────
+    minors_html = ""
+    for mcode, mdata in minors.items():
+        dname = mdata["display_name"]
+        rows  = mdata["rows"]
+        pools = mdata["pools"]
+        inner = ""
+        # Group: required first, then each pool
+        req_rows  = [r for r in rows if str(r.get("minor_slot_type","")).lower() != "pool"]
+        pool_rows = [r for r in rows if str(r.get("minor_slot_type","")).lower() == "pool"]
+
+        if req_rows:
+            inner += '<div class="minor-group"><div class="minor-group-hdr">Required</div>'
+            inner += "".join(course_box(r) for r in req_rows)
+            inner += "</div>"
+
+        if pool_rows:
+            pool_ids_seen = []
+            for r in pool_rows:
+                pid = str(r.get("minor_pool_id","")).strip()
+                if pid not in pool_ids_seen:
+                    pool_ids_seen.append(pid)
+            for pid in pool_ids_seen:
+                pid_rows = [r for r in pool_rows if str(r.get("minor_pool_id","")).strip() == pid]
+                ps = pools.get(pid, {})
+                done   = ps.get("done", 0)
+                needed = ps.get("needed", 1)
+                ct     = ps.get("count_type", "courses")
+                total  = ps.get("total_avail", len(pid_rows))
+                label  = ps.get("label", "")
+                done_disp = int(done) if done == int(done) else round(done, 1)
+                check = "✓" if done_disp >= needed else "○"
+                hdr_text = label if label and label.lower() not in ("", "nan") else f"Choose {needed} of {total} {ct}"
+                inner += (
+                    f'<div class="minor-group">'
+                    f'<div class="minor-group-hdr">{hdr_text}'
+                    f' &nbsp;<span class="pool-progress">{check} {done_disp} / {needed} done</span>'
+                    f'</div>'
+                )
+                inner += "".join(course_box(r) for r in pid_rows)
+                inner += "</div>"
+
+        minors_html += (
+            f'<div class="minor-section">'
+            f'<h3 class="minor-title">{dname} Minor Requirements</h3>'
+            f'<div class="minor-body">{inner}</div>'
+            f'</div>'
+        )
+
+    # ── unmapped ──────────────────────────────────────────────────────────────
+    unmapped_html = ""
+    if unmapped:
+        items = ""
+        for r in unmapped:
+            # Unmapped rows store actual course data in match_* fields, not slot_* fields
+            cid   = norm_id(r.get("match_course_id","") or r.get("slot_course_id",""))
+            cname = str(r.get("match_course_name","") or r.get("slot_course_name","")).strip()
+            if not cid or cid.lower() in ("nan", ""):
+                continue
+            items += (
+            f'<div class="unmapped-chip" draggable="true" '
+            f'data-cid="{cid}" data-cname="{cname}" '
+            f'title="Drag onto a course slot to assign as override">'
+            f'{cid} \u2014 {cname}</div>'
+        )
+        unmapped_html = (
+            f'<div id="unmapped">'
+            f'<strong>Unmapped / out-of-map courses</strong>'
+            f'<span class="unmapped-hint">\u2014 drag onto a slot to override</span>'
+            f'<div class="unmapped-chips">{items}</div>'
+            f'</div>'
+        )
+
+    # ── CPR table ─────────────────────────────────────────────────────────────
+    table_html = build_cpr_table(df)
+
+    # ── full document ─────────────────────────────────────────────────────────
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CPR \u2014 {student_name}</title>
+<style>
+*{{box-sizing:border-box;margin:0;padding:0}}
+body{{font-family:"Segoe UI",Arial,sans-serif;background:#1a1a2e;color:#e0e0e0;min-height:100vh;padding:16px}}
+#page-header{{text-align:center;padding:14px 20px;background:#16213e;border:1px solid #0f3460;border-radius:8px;margin-bottom:14px}}
+#page-header h1{{font-size:1.35rem;color:#e0e0e0}}
+#page-header .student-name{{font-size:1.1rem;font-weight:700;color:#ffffff;margin-top:6px}}
+#page-header .meta{{font-size:.88rem;color:#8090b0;margin-top:3px}}
+#legend{{display:flex;gap:14px;flex-wrap:wrap;justify-content:center;margin-bottom:12px;font-size:.76rem}}
+.legend-item{{display:flex;align-items:center;gap:5px}}
+.legend-swatch{{width:13px;height:13px;border-radius:3px;border:1px solid rgba(255,255,255,.2);flex-shrink:0}}
+#curriculum-grid{{display:flex;gap:8px;position:relative}}
+.year-group{{flex:1;background:#16213e;border:1px solid #0f3460;border-radius:8px;overflow:hidden;min-width:0}}
+.year-header{{text-align:center;font-weight:700;font-size:.78rem;color:#a0c4ff;padding:6px 4px;background:#0f3460;text-transform:uppercase;letter-spacing:.06em}}
+.semesters{{display:flex}}
+.semester{{flex:1;padding:6px 4px;border-right:1px solid #0f3460;min-width:0}}
+.semester:last-child{{border-right:none}}
+.sem-header{{text-align:center;font-size:.68rem;color:#607090;font-weight:600;text-transform:uppercase;letter-spacing:.06em;margin-bottom:5px;padding-bottom:3px;border-bottom:1px solid #0f3460}}
+.empty-slot{{text-align:center;color:#444;font-size:.68rem;padding:6px 0}}
+.course-box{{border-radius:5px;padding:5px 6px;margin-bottom:5px;cursor:pointer;transition:transform .12s,box-shadow .15s;position:relative;z-index:1}}
+.course-box:hover{{transform:scale(1.05);z-index:50;box-shadow:0 4px 18px rgba(0,0,0,.6)}}
+.course-box.completed{{background:#1b4332;border:1.5px solid #2d6a4f;color:#d8f3dc}}
+.course-box.inprog{{background:#0d2137;border:1.5px solid #1565c0;color:#bbdefb}}
+.course-box.belowmin{{background:#3e2400;border:1.5px solid #ff9800;color:#ffe0b2}}
+.course-box.eligible{{background:#252510;border:2px solid #d4aa00;color:#fff5cc}}
+.course-box.locked{{background:#1c1c1c;border:1.5px solid #333;color:#484848;opacity:.55}}
+.course-box.nextelig{{background:#1c1500;border:2px dashed #ff8c00;box-shadow:0 0 0 2px #d4aa00;color:#ffe0a0;opacity:.85}}
+.attempt-dots{{position:absolute;bottom:4px;left:4px;display:flex;gap:3px}}
+.attempt-dot{{width:7px;height:7px;background:#cc2222;border-radius:50%;flex-shrink:0}}
+.cid{{font-size:.68rem;font-weight:700;letter-spacing:.02em}}
+.cname{{font-size:.62rem;line-height:1.3;margin-top:2px}}
+.meta{{font-size:.60rem;margin-top:3px;display:flex;gap:6px;opacity:.8}}
+.grade{{font-weight:700}}
+#electives{{margin-top:10px;background:#16213e;border:1px solid #0f3460;border-radius:8px;padding:10px}}
+.elects-inner{{display:flex;gap:14px;flex-wrap:wrap}}
+.elective-group{{flex:1;min-width:160px}}
+.elective-header{{font-size:.75rem;font-weight:700;color:#a0c4ff;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;padding-bottom:3px;border-bottom:1px solid #0f3460}}
+.elective-boxes{{display:flex;flex-wrap:wrap;gap:5px}}
+.elective-boxes .course-box{{flex:0 0 auto;min-width:88px;max-width:145px}}
+.minor-section{{margin-top:10px;background:#16213e;border:1px solid #0f3460;border-radius:8px;padding:10px}}
+.minor-title{{font-size:.85rem;font-weight:700;color:#c9d1d9;margin-bottom:8px;padding-bottom:4px;border-bottom:1px solid #0f3460}}
+.minor-body{{display:flex;gap:14px;flex-wrap:wrap;align-items:flex-start}}
+.minor-group{{flex:1;min-width:160px}}
+.minor-group-hdr{{font-size:.72rem;font-weight:700;color:#a0c4ff;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px}}
+.pool-progress{{font-weight:400;color:#90caf9;text-transform:none;letter-spacing:0}}
+#arrows-svg{{position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:5}}
+#fixed-btns{{position:fixed;bottom:16px;right:16px;display:flex;flex-direction:column;gap:6px;z-index:100}}
+#arrow-toggle,#print-btn{{background:#0f3460;color:#a0c4ff;border:1px solid #1565c0;border-radius:6px;padding:7px 14px;font-size:.78rem;cursor:pointer}}
+#arrow-toggle:hover,#print-btn:hover{{background:#1565c0;color:#fff}}
+@media print{{
+  #fixed-btns,#arrows-svg,#legend{{display:none!important}}
+  body{{background:#fff;color:#111;padding:0}}
+  #page-header{{background:#fff;border:1px solid #ccc;color:#111}}
+  #page-header h1,#page-header .student-name{{color:#111}}
+  #page-header .meta{{color:#555}}
+  #curriculum-grid,.year-group{{background:#fff;border-color:#ccc}}
+  .year-header{{background:#ddd;color:#111}}
+  .semester{{border-color:#ccc}}
+  .sem-header{{color:#555;border-color:#ccc}}
+  .course-box.completed{{background:#d4edda;border-color:#28a745;color:#111}}
+  .course-box.inprog{{background:#cce5ff;border-color:#004085;color:#111}}
+  .course-box.belowmin{{background:#fff3cd;border-color:#ff9800;color:#111}}
+  .course-box.eligible{{background:#fffbe0;border:2px solid #b89000;color:#111}}
+  .course-box.locked{{background:#f0f0f0;border-color:#ccc;color:#888;opacity:1}}
+  .course-box.nextelig{{background:#fff5e0;border:2px dashed #e07000;box-shadow:0 0 0 2px #b89000;color:#111;opacity:1}}
+  .attempt-dot{{background:#cc2222}}
+  #electives{{background:#fff;border-color:#ccc}}
+  #cpr-table-section{{margin-top:12px}}
+  .cell-completed,.cell-completed td{{background-color:#eaf7ee!important}}
+  .cell-inprog,.cell-inprog td{{background-color:#e8f0fd!important}}
+  .cell-eligible,.cell-eligible td{{background-color:#fffde7!important}}
+  .cell-belowmin,.cell-belowmin td{{background-color:#fff3e0!important}}
+  .badge{{border:1px solid #999}}
+  .course-box.override{{border-top:2px solid #b8960c!important;border-left:2px solid #b8960c!important;border-right:2px solid #993333!important;border-bottom:2px solid #993333!important;background:#fffbf0!important;color:#111!important;opacity:1!important}}
+  .cell-override,.cell-override td{{background-color:#fff8e1!important;color:#7a5c00!important}}
+  .unmapped-hint{{display:none}}
+  .unmapped-chip{{background:#f0f0f0!important;border-color:#ccc!important;color:#333!important}}
+  .unmapped-chip.chip-used{{display:none}}
+}}
+/* ── CPR table ── */
+#cpr-table-section{{margin-top:20px;padding:16px;background:#fff;border-radius:8px;color:#111}}
+.table-title{{font-size:1rem;font-weight:700;margin-bottom:10px;color:#111}}
+.cpr-table{{width:100%;border-collapse:collapse;font-size:.73rem}}
+.cpr-table td,.cpr-table th{{border:1px solid #bbb;padding:3px 6px;text-align:left}}
+.year-label-row td{{background:#c8c8c8;font-weight:700;font-size:.78rem;text-align:center;padding:4px 6px;border-bottom:2px solid #999}}
+.sem-hdr-row th{{background:#e4e4e4;font-weight:700;text-align:center;font-size:.7rem}}
+.sep{{border:none!important;width:6px;background:#fff!important}}
+.cr{{width:36px;text-align:center}}
+.term-col{{width:62px;font-size:.66rem;color:#444}}
+.t-cid{{font-weight:700;width:82px}}
+.t-name{{min-width:120px}}
+.cid-req{{color:#c00}}
+.row-ah{{background:#dce8f8}}
+.row-ss{{background:#fce4d0}}
+.row-te{{background:#d8efd8}}
+.total-row td{{background:#efefef;font-weight:700;border-top:2px solid #bbb}}
+.total-label{{text-align:right}}
+.total-val{{text-align:center}}
+.grand-total-row td{{background:#ddd;font-weight:700;text-align:right;padding-right:10px}}
+.t-grade{{width:46px;text-align:center;font-weight:700}}
+.cell-completed td,.cell-completed{{background-color:#eaf7ee!important;color:#1a4d2e}}
+.cell-inprog td,.cell-inprog{{color:#1565c0;font-style:italic;background-color:#e8f0fd!important}}
+.cell-belowmin td,.cell-belowmin{{color:#b74000;background-color:#fff3e0!important}}
+.cell-eligible td,.cell-eligible{{color:#5a4500;background-color:#fffbe0!important}}
+.cell-locked td,.cell-locked{{color:#aaa}}
+.badge{{display:inline-block;font-size:.58rem;font-weight:700;padding:1px 5px;border-radius:3px;vertical-align:middle;margin-left:4px;white-space:nowrap}}
+.badge-next{{background:#fffbe0;color:#5a4500;border:1px solid #b89000}}
+.badge-inprog{{background:#cce5ff;color:#004085;border:1px solid #004085}}
+.badge-belowmin{{background:#ffe0b2;color:#7a2c00;border:1px solid #e65100}}
+/* ── cross-link flash & undo ── */
+.flash-hl{{outline:2px solid #ff8c00!important;outline-offset:2px}}
+.undo-btn{{position:absolute;top:2px;right:2px;background:rgba(180,40,40,.8);color:#fff;border:none;border-radius:3px;width:15px;height:15px;font-size:.65rem;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;line-height:1;z-index:10}}
+.undo-btn:hover{{background:#cc2222}}
+td[data-slot-cid]{{cursor:pointer}}
+/* ── override drag-drop ── */
+#unmapped{{margin-top:8px;font-size:.75rem;color:#666;background:#16213e;border:1px solid #0f3460;border-radius:6px;padding:8px 12px}}
+.unmapped-hint{{font-size:.68rem;color:#445;margin-left:7px}}
+.unmapped-chips{{display:flex;flex-wrap:wrap;gap:5px;margin-top:7px}}
+.unmapped-chip{{cursor:grab;padding:3px 9px;border-radius:4px;border:1px solid #1565c0;background:#0d2137;color:#a0c4ff;font-size:.72rem;user-select:none;transition:background .1s}}
+.unmapped-chip:hover{{background:#1565c0;color:#fff}}
+.unmapped-chip.chip-used{{opacity:.35;cursor:default;text-decoration:line-through}}
+.course-box.override{{border-top:2px solid #d4aa00!important;border-left:2px solid #d4aa00!important;border-right:2px solid #cc2222!important;border-bottom:2px solid #cc2222!important;background:#1f1a0a!important;color:#ffe8c0!important;opacity:1!important}}
+.course-box.drag-over{{outline:2px dashed #fff;outline-offset:2px}}
+.cell-override{{background:#fff8e1!important;color:#7a5c00!important}}
+</style>
+</head>
+<body>
+<svg id="arrows-svg"></svg>
+<div id="page-header">
+  <h1>Curriculum Progress Report</h1>
+  <div class="student-name">{student_name}</div>
+  <div class="meta">{major} &bull; Start: {start_year}</div>
+</div>
+<div id="legend">
+  <div class="legend-item"><div class="legend-swatch" style="background:#1b4332;border-color:#2d6a4f"></div>Completed</div>
+  <div class="legend-item"><div class="legend-swatch" style="background:#0d2137;border-color:#1565c0"></div>In Progress</div>
+  <div class="legend-item"><div class="legend-swatch" style="background:#3e2400;border-color:#ff9800"></div>Below Min Grade</div>
+  <div class="legend-item"><div class="legend-swatch" style="background:#252510;border:2px solid #d4aa00"></div>Eligible Now</div>
+  <div class="legend-item"><div class="legend-swatch" style="background:#1c1500;border:2px dashed #ff8c00;box-shadow:0 0 0 2px #d4aa00;opacity:.85"></div>Eligible Next Semester</div>
+  <div class="legend-item"><div class="legend-swatch" style="background:#1c1c1c;border-color:#333;opacity:.55"></div>Locked</div>
+  <div class="legend-item" style="display:flex;align-items:center;gap:5px"><span style="width:7px;height:7px;background:#cc2222;border-radius:50%;display:inline-block;flex-shrink:0"></span>Prior attempt</div>
+  <div class="legend-item"><div class="legend-swatch" style="border-top:2px solid #d4aa00;border-left:2px solid #d4aa00;border-right:2px solid #cc2222;border-bottom:2px solid #cc2222;background:#1f1a0a"></div>Manual Override</div>
+</div>
+<div id="curriculum-grid">
+{grid_html}
+</div>
+{elects_html}
+{minors_html}
+{unmapped_html}
+{table_html}
+<div id="fixed-btns">
+  <button id="arrow-toggle" onclick="toggleArrows()">Hide Prereq Arrows</button>
+  <button id="print-btn" onclick="window.print()">Print / Save PDF</button>
+</div>
+<script>
+(function(){{
+  var svg=document.getElementById('arrows-svg');
+  var arrowsVisible=true;
+  var courseMap={{}};
+  document.querySelectorAll('.course-box[data-cid]').forEach(function(el){{
+    var cid=el.getAttribute('data-cid');
+    if(cid) courseMap[cid]=el;
+  }});
+  function getRight(el){{var r=el.getBoundingClientRect();return{{x:r.right,y:r.top+r.height/2}};}}
+  function getLeft(el){{var r=el.getBoundingClientRect();return{{x:r.left,y:r.top+r.height/2}};}}
+  function statusColor(el){{
+    if(el.classList.contains('completed')) return'#2d6a4f';
+    if(el.classList.contains('inprog'))    return'#1565c0';
+    if(el.classList.contains('belowmin'))  return'#e65100';
+    if(el.classList.contains('eligible'))  return'#b8960c';
+    return'#3a3a3a';
+  }}
+  function ensureMarker(color){{
+    var id='ah-'+color.replace('#','');
+    if(svg.querySelector('#'+id)) return;
+    var defs=svg.querySelector('defs');
+    if(!defs){{defs=document.createElementNS('http://www.w3.org/2000/svg','defs');svg.insertBefore(defs,svg.firstChild);}}
+    var marker=document.createElementNS('http://www.w3.org/2000/svg','marker');
+    marker.setAttribute('id',id);marker.setAttribute('markerWidth','8');marker.setAttribute('markerHeight','8');
+    marker.setAttribute('refX','7');marker.setAttribute('refY','4');marker.setAttribute('orient','auto');
+    var poly=document.createElementNS('http://www.w3.org/2000/svg','polygon');
+    poly.setAttribute('points','0 0, 8 4, 0 8');poly.setAttribute('fill',color);poly.setAttribute('fill-opacity','0.75');
+    marker.appendChild(poly);defs.appendChild(marker);
+  }}
+  function makePath(x1,y1,x2,y2,color,dashed){{
+    var dx=Math.min(Math.abs(x2-x1)*.45,80);
+    var d='M'+x1+','+y1+' C'+(x1+dx)+','+y1+' '+(x2-dx)+','+y2+' '+x2+','+y2;
+    var p=document.createElementNS('http://www.w3.org/2000/svg','path');
+    p.setAttribute('d',d);p.setAttribute('fill','none');p.setAttribute('stroke',color);
+    p.setAttribute('stroke-width','1.4');p.setAttribute('stroke-opacity','0.5');
+    p.setAttribute('marker-end','url(#ah-'+color.replace('#','')+')');
+    if(dashed) p.setAttribute('stroke-dasharray','5 3');
+    p.classList.add('prereq-arrow');
+    return p;
+  }}
+  function drawArrows(){{
+    svg.querySelectorAll('.prereq-arrow').forEach(function(e){{e.remove();}});
+    document.querySelectorAll('.course-box[data-prereqs]').forEach(function(targetEl){{
+      var prereqs,coreqs;
+      try{{prereqs=JSON.parse(targetEl.getAttribute('data-prereqs')||'[]');}}catch(e){{prereqs=[];}}
+      try{{coreqs=JSON.parse(targetEl.getAttribute('data-coreqs')||'[]');}}catch(e){{coreqs=[];}}
+      prereqs.forEach(function(pid){{
+        var src=courseMap[pid];if(!src) return;
+        var color=statusColor(src);ensureMarker(color);
+        var s=getRight(src),t=getLeft(targetEl);
+        if(s.x<t.x) svg.appendChild(makePath(s.x,s.y,t.x,t.y,color,false));
+      }});
+      coreqs.forEach(function(cid){{
+        var src=courseMap[cid];if(!src) return;
+        var color='#506070';ensureMarker(color);
+        var s=getRight(src),t=getLeft(targetEl);
+        if(s.x<t.x) svg.appendChild(makePath(s.x,s.y,t.x,t.y,color,true));
+      }});
+    }});
+  }}
+  window.toggleArrows=function(){{
+    arrowsVisible=!arrowsVisible;
+    svg.style.display=arrowsVisible?'':'none';
+    document.getElementById('arrow-toggle').textContent=arrowsVisible?'Hide Prereq Arrows':'Show Prereq Arrows';
+  }};
+  window.addEventListener('load',drawArrows);
+  window.addEventListener('resize',drawArrows);
+  window.addEventListener('scroll',drawArrows,{{passive:true}});
+  // ── Cross-link: course box ↔ table row ───────────────────────────────────
+  var wasDragging=false;
+  document.addEventListener('dragend',function(){{wasDragging=true;setTimeout(function(){{wasDragging=false;}},250);}});
+  function flashEl(el){{
+    el.classList.add('flash-hl');
+    setTimeout(function(){{el.classList.remove('flash-hl');}},1100);
+  }}
+  document.querySelectorAll('.course-box[data-cid]').forEach(function(box){{
+    box.addEventListener('click',function(e){{
+      if(wasDragging||e.target.closest('.undo-btn,.attempt-dots')) return;
+      var cid=box.getAttribute('data-cid');
+      var td=document.querySelector('td[data-slot-cid="'+cid+'"]');
+      if(!td) return;
+      var tr=td.closest('tr');
+      tr.scrollIntoView({{behavior:'smooth',block:'center'}});
+      flashEl(tr);
+    }});
+  }});
+  document.querySelectorAll('td[data-slot-cid]').forEach(function(td){{
+    td.addEventListener('click',function(){{
+      var cid=td.getAttribute('data-slot-cid');
+      var box=document.getElementById('c-'+cid.replace(/[^A-Za-z0-9]/g,'-'))||courseMap[cid];
+      if(!box) return;
+      box.scrollIntoView({{behavior:'smooth',block:'center'}});
+      flashEl(box);
+    }});
+  }});
+  // ── Override drag-drop ────────────────────────────────────────────────────
+  var dragState=null;
+  document.querySelectorAll('.unmapped-chip').forEach(function(chip){{
+    chip.addEventListener('dragstart',function(e){{
+      dragState={{cid:chip.getAttribute('data-cid'),cname:chip.getAttribute('data-cname'),chip:chip}};
+      e.dataTransfer.effectAllowed='copy';
+    }});
+  }});
+  document.querySelectorAll('.course-box').forEach(function(box){{
+    box.addEventListener('dragover',function(e){{
+      if(!dragState) return;
+      e.preventDefault();e.dataTransfer.dropEffect='copy';
+      box.classList.add('drag-over');
+    }});
+    box.addEventListener('dragleave',function(){{box.classList.remove('drag-over');}});
+    box.addEventListener('drop',function(e){{
+      if(!dragState) return;
+      e.preventDefault();
+      box.classList.remove('drag-over');
+      var targetCid=box.getAttribute('data-cid');
+      var ovCid=dragState.cid;
+      var ovCname=dragState.cname;
+      // Apply override styling
+      box.classList.remove('completed','inprog','belowmin','eligible','locked','nextelig');
+      box.classList.add('override');
+      box.setAttribute('data-override-cid',ovCid);
+      // Update box display
+      var cidEl=box.querySelector('.cid');
+      var cnEl=box.querySelector('.cname');
+      if(cidEl) cidEl.innerHTML=ovCid+'<span style="font-size:.52rem;color:#cc2222;margin-left:3px">\u25b2OVR</span>';
+      if(cnEl)  cnEl.textContent=ovCname;
+      // Register override in courseMap for arrow drawing
+      courseMap[ovCid]=box;
+      if(targetCid) courseMap[targetCid]=box;
+      // Mark chip as used
+      dragState.chip.classList.add('chip-used');
+      dragState.chip.removeAttribute('draggable');
+      // Inject undo button into box
+      var undoBtn=document.createElement('button');
+      undoBtn.className='undo-btn';undoBtn.title='Undo override';undoBtn.textContent='\u00d7';
+      undoBtn.addEventListener('click',function(e){{
+        e.stopPropagation();
+        var origStatus=box.getAttribute('data-orig-status')||'locked';
+        var origCidVal=box.getAttribute('data-orig-cid')||'';
+        var origCnameVal=box.getAttribute('data-orig-cname')||'';
+        var chipCid=box.getAttribute('data-override-cid');
+        box.classList.remove('override');box.classList.add(origStatus);
+        box.removeAttribute('data-override-cid');
+        var cidEl2=box.querySelector('.cid');var cnEl2=box.querySelector('.cname');
+        if(cidEl2) cidEl2.textContent=origCidVal;
+        if(cnEl2)  cnEl2.textContent=origCnameVal;
+        undoBtn.remove();
+        if(chipCid){{
+          delete courseMap[chipCid];
+          document.querySelectorAll('.unmapped-chip[data-cid="'+chipCid+'"]').forEach(function(ch){{
+            ch.classList.remove('chip-used');ch.setAttribute('draggable','true');
+          }});
+        }}
+        // Revert any courses unlocked solely by this override
+        revertUnlocks();
+        drawArrows();
+      }});
+      box.appendChild(undoBtn);
+      dragState=null;
+      // Update CPR table rows for this slot
+      [targetCid,ovCid].filter(Boolean).forEach(function(cid){{
+        document.querySelectorAll('td[data-slot-cid="'+cid+'"]').forEach(function(td){{
+          td.closest('tr').querySelectorAll('td').forEach(function(c){{
+            c.className=c.className.replace(/\\bcell-\\S+/g,'').trim();
+            c.classList.add('cell-override');
+          }});
+          td.innerHTML=ovCid+'<span style="font-size:.58rem;color:#9a7c00;margin-left:3px">OVR</span>';
+        }});
+      }});
+      // Propagate unlocks to downstream locked courses
+      propagateUnlocks();
+      drawArrows();
+    }});
+  }});
+  function getSatisfied(){{
+    var sat=new Set();
+    document.querySelectorAll('.course-box[data-cid]').forEach(function(el){{
+      if(el.classList.contains('completed')||el.classList.contains('inprog')||el.classList.contains('override')){{
+        var cid=el.getAttribute('data-cid');if(cid) sat.add(cid);
+        var ov=el.getAttribute('data-override-cid');if(ov) sat.add(ov);
+      }}
+    }});
+    return sat;
+  }}
+  function revertUnlocks(){{
+    var sat=getSatisfied();
+    // Re-lock any eligible box whose original status was locked/nextelig and prereqs no longer met
+    document.querySelectorAll('.course-box.eligible[data-orig-status]').forEach(function(el){{
+      var orig=el.getAttribute('data-orig-status');
+      if(orig==='eligible') return; // was naturally eligible, keep it
+      var pre;try{{pre=JSON.parse(el.getAttribute('data-prereqs')||'[]');}}catch(e){{pre=[];}}
+      if(!pre.length) return;
+      if(!pre.every(function(p){{return sat.has(p);}})){{
+        el.classList.remove('eligible');el.classList.add(orig||'locked');
+        // Sync table
+        var cid2=el.getAttribute('data-cid');
+        document.querySelectorAll('td[data-slot-cid="'+cid2+'"]').forEach(function(td2){{
+          td2.closest('tr').querySelectorAll('td').forEach(function(c){{
+            if(c.classList.contains('cell-eligible')){{
+              c.className=c.className.replace(/\\bcell-eligible\\b/,'cell-locked').trim();
+            }}
+          }});
+        }});
+      }}
+    }});
+    // Revert override's table rows back to original status
+  }}
+  function propagateUnlocks(){{
+    var sat=getSatisfied();
+    var changed=true;
+    while(changed){{
+      changed=false;
+      document.querySelectorAll('.course-box.locked,.course-box.nextelig').forEach(function(el){{
+        var pre;try{{pre=JSON.parse(el.getAttribute('data-prereqs')||'[]');}}catch(e){{pre=[];}}
+        if(!pre.length) return;
+        if(pre.every(function(p){{return sat.has(p);}})){{
+          el.classList.remove('locked','nextelig');el.classList.add('eligible');
+          changed=true;
+        }}
+      }});
+    }}
+    // Sync table: locked→eligible for any newly eligible boxes
+    document.querySelectorAll('.course-box.eligible[data-cid]').forEach(function(el){{
+      var cid=el.getAttribute('data-cid');
+      document.querySelectorAll('td[data-slot-cid="'+cid+'"]').forEach(function(td){{
+        td.closest('tr').querySelectorAll('td').forEach(function(c){{
+          if(c.classList.contains('cell-locked')){{
+            c.className=c.className.replace(/\\bcell-locked\\b/,'cell-eligible').trim();
+          }}
+        }});
+      }});
+    }});
+  }}
+}})();
+</script>
+</body>
+</html>
+"""
+
+
+def _safe_filename(s: str) -> str:
+    """Strip characters unsafe for filenames."""
+    return re.sub(r"[^\w\-]", "_", str(s or "")).strip("_") or "Unknown"
+
+
+def generate_html(csv_path: str) -> str:
+    """Read a filled_pathway CSV and write a _cpr.html next to it. Returns output path."""
+    df   = pd.read_csv(str(csv_path), engine="python")
+    html = build_html(df)
+
+    # Build a descriptive filename: LastName_Year_Track_cpr.html
+    parent = Path(csv_path).parent
+    sname  = ""
+    for col in ["student_name", "full_name"]:
+        if col in df.columns:
+            v = df[col].dropna().astype(str)
+            v = v[v.str.strip().ne("") & v.str.lower().ne("nan")]
+            if not v.empty:
+                sname = v.iloc[0]; break
+    last_name = _safe_filename(sname.split()[-1]) if sname.strip() else "Unknown"
+
+    yr = ""
+    if "student_start_year" in df.columns:
+        yv = df["student_start_year"].dropna().astype(str).str.strip()
+        yv = yv[yv.ne("") & yv.ne("nan")]
+        yr = yv.iloc[0] if not yv.empty else ""
+
+    track = ""
+    for col in ["source_track", "plan_short"]:
+        if col in df.columns:
+            tv = df[col].dropna().astype(str).str.strip()
+            tv = tv[tv.ne("") & tv.ne("nan")]
+            if not tv.empty:
+                track = _safe_filename(tv.iloc[0]); break
+
+    parts = [p for p in [last_name, yr, track] if p]
+    fname = "_".join(parts) + "_cpr.html"
+    out_path = str(parent / fname)
+
+    with open(out_path, "w", encoding="utf-8") as f:
+        f.write(html)
+    return out_path
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# PIPELINE
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def run_pipeline(pdf_path: str, log_fn=print) -> str:
+    """Run all three steps. Returns path to the generated HTML file."""
+    pdf_path = Path(pdf_path)
+
+    log_fn("Step 1/3 — Parsing PDF transcript...")
+    csv_path = convert_pdf_to_csv(pdf_path)
+    log_fn(f"  \u2713 {csv_path.name}")
+
+    log_fn("Step 2/3 — Mapping to curriculum...")
+    filled_path = fill_pathway(csv_path)
+    log_fn(f"  \u2713 {filled_path.name}")
+
+    log_fn("Step 3/3 — Generating HTML map...")
+    html_path = generate_html(str(filled_path))
+    log_fn(f"  \u2713 {Path(html_path).name}")
+
+    return html_path
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# GUI
+# ═══════════════════════════════════════════════════════════════════════════════
+
+class AdvisingBotApp:
+    def __init__(self, root: tk.Tk):
+        self.root = root
+        root.title("AdvisingBot")
+        root.geometry("500x340")
+        root.resizable(False, False)
+        root.configure(bg="#1a1a2e")
+
+        tk.Label(root, text="AdvisingBot", font=("Segoe UI", 15, "bold"),
+                 bg="#1a1a2e", fg="#a0c4ff").pack(pady=(18, 2))
+        tk.Label(root, text="Transcript PDF \u2192 Curriculum Map",
+                 font=("Segoe UI", 9), bg="#1a1a2e", fg="#607090").pack(pady=(0, 14))
+
+        self.btn = tk.Button(
+            root, text="Select PDF & Run",
+            font=("Segoe UI", 11, "bold"),
+            bg="#0f3460", fg="#a0c4ff",
+            activebackground="#1565c0", activeforeground="#ffffff",
+            relief="flat", bd=0, padx=20, pady=10,
+            command=self._on_click,
+        )
+        self.btn.pack(pady=(0, 12))
+
+        log_frame = tk.Frame(root, bg="#16213e", bd=0)
+        log_frame.pack(fill="both", expand=True, padx=16, pady=(0, 16))
+        self.log_box = scrolledtext.ScrolledText(
+            log_frame, height=10, wrap="word",
+            bg="#0d1117", fg="#c9d1d9",
+            font=("Consolas", 8), bd=0, insertbackground="#c9d1d9",
+            state="disabled",
+        )
+        self.log_box.pack(fill="both", expand=True, padx=1, pady=1)
+
+    def _log(self, msg: str):
+        """Append a line to the log box (thread-safe via after())."""
+        def _append():
+            self.log_box.configure(state="normal")
+            self.log_box.insert("end", msg + "\n")
+            self.log_box.see("end")
+            self.log_box.configure(state="disabled")
+        self.root.after(0, _append)
+
+    def _set_btn(self, enabled: bool):
+        self.root.after(0, lambda: self.btn.configure(
+            state="normal" if enabled else "disabled",
+            text="Select PDF & Run" if enabled else "Running…",
+        ))
+
+    def _on_click(self):
+        pdf_path = filedialog.askopenfilename(
+            title="Select transcript PDF",
+            filetypes=[("PDF files", "*.pdf"), ("All files", "*.*")],
+        )
+        if not pdf_path:
+            return
+        self._set_btn(False)
+        # Clear log
+        self.log_box.configure(state="normal")
+        self.log_box.delete("1.0", "end")
+        self.log_box.configure(state="disabled")
+
+        threading.Thread(target=self._run, args=(pdf_path,), daemon=True).start()
+
+    def _run(self, pdf_path: str):
+        try:
+            html_path = run_pipeline(pdf_path, self._log)
+            abs_path  = os.path.abspath(html_path)
+            webbrowser.open(f"file://{abs_path}")
+            self._log(f"\nDone! Opened in browser.\n{abs_path}")
+        except Exception as e:
+            self._log(f"\nError: {e}")
+            self.root.after(0, lambda: messagebox.showerror("AdvisingBot", str(e)))
+        finally:
+            self._set_btn(True)
+
+
+def main():
+    root = tk.Tk()
+    AdvisingBotApp(root)
+    root.mainloop()
+
+
+if __name__ == "__main__":
+    main()
