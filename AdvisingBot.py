@@ -659,10 +659,16 @@ def _best_attempts(tx: pd.DataFrame) -> pd.DataFrame:
                 grade = "W"
             recs.append({"grade": grade, "term": term})
         return json.dumps(recs[:4])
-    fail_records = fail_rows.groupby("course_id_norm").apply(
-        _fail_records, include_groups=False
-    )
-    fail_records.name = "prior_fail_records"
+    if fail_rows.empty:
+        fail_records = pd.Series(dtype="object", name="prior_fail_records")
+    else:
+        try:
+            fail_records = fail_rows.groupby("course_id_norm").apply(
+                _fail_records, include_groups=False
+            )
+        except TypeError:
+            fail_records = fail_rows.groupby("course_id_norm").apply(_fail_records)
+        fail_records.name = "prior_fail_records"
     df["__prio"] = df["attempt_status"].map(STATUS_PRIO).fillna(0)
     df["__y"]   = df["term_code"].astype(str).map(lambda s: _term_sort_key(s)[0])
     df["__t"]   = df["term_code"].astype(str).map(lambda s: _term_sort_key(s)[1])
