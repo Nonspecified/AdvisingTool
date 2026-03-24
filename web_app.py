@@ -185,11 +185,12 @@ def process():
                                           password_required=bool(ACCESS_PASSWORD),
                                           error="This doesn't look like a UMass transcript. Please upload an official transcript PDF."), 400
 
-        # Store transcript CSV in session so the user can add a minor later
+        # Store transcript CSV in session so the user can add minors later
         _cleanup_sessions()
         session_id = str(uuid.uuid4())
         _sessions[session_id] = {
             "transcript_csv": Path(csv_path).read_text(encoding="utf-8"),
+            "extra_minor_codes": [],
             "ts": time.time(),
         }
 
@@ -220,15 +221,21 @@ def select_minor():
 @app.route("/remove-minor", methods=["GET"])
 def remove_minor():
     session_id = request.args.get("session", "")
+    minor_code = request.args.get("code", "").strip().upper()
     if not session_id or session_id not in _sessions:
         return redirect("/")
+
+    # Remove the specific minor code from the session list
+    codes = _sessions[session_id].get("extra_minor_codes", [])
+    codes = [c for c in codes if c != minor_code]
+    _sessions[session_id]["extra_minor_codes"] = codes
 
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)
         csv_path = tmp / "transcript.csv"
         csv_path.write_text(_sessions[session_id]["transcript_csv"], encoding="utf-8")
 
-        filled_csv = fill_pathway(csv_path)  # no extra minor
+        filled_csv = fill_pathway(csv_path, extra_minor_codes=codes if codes else None)
         html_path = generate_html(filled_csv)
         html_content = Path(html_path).read_text(encoding="utf-8")
 
@@ -245,13 +252,19 @@ def apply_minor():
     if not minor_code:
         return redirect(f"/select-minor?session={session_id}")
 
+    # Append to list (avoid duplicates)
+    codes = _sessions[session_id].get("extra_minor_codes", [])
+    if minor_code not in codes:
+        codes.append(minor_code)
+    _sessions[session_id]["extra_minor_codes"] = codes
+
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)
         csv_path = tmp / "transcript.csv"
         csv_path.write_text(_sessions[session_id]["transcript_csv"], encoding="utf-8")
 
-        # Step 2: filled pathway CSV (with extra minor)
-        filled_csv = fill_pathway(csv_path, extra_minor_code=minor_code)
+        # Step 2: filled pathway CSV (with extra minors)
+        filled_csv = fill_pathway(csv_path, extra_minor_codes=codes)
 
         # Step 3: filled CSV → interactive HTML CPR map
         html_path = generate_html(filled_csv)

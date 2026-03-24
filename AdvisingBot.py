@@ -45,7 +45,7 @@ TRANSCRIPT_HEADERS = [
     "is_transfer", "transfer_from", "transfer_effective_term", "transfer_effective_date",
     "program", "plan", "plan_short",
     "full_name", "first_name", "last_name", "student_id", "email",
-    "transcript_date", "source_file",
+    "transcript_date", "source_file", "cum_gpa",
 ]
 
 # Step 2 grade / status tables
@@ -203,6 +203,9 @@ def _extract_pdf_text(pdf_path: Path) -> list:
     return lines
 
 
+_CUM_GPA_RE = re.compile(r"Cum\s+GPA:\s*([\d.]+)", re.I)
+
+
 def _parse_student_header(lines: list, source_file: str) -> dict:
     full_name = student_id = email = tdate_iso = ""
     for ln in lines[:200]:
@@ -226,6 +229,13 @@ def _parse_student_header(lines: list, source_file: str) -> dict:
                 except ValueError:
                     pass
 
+    # Scan ALL lines for the last Cum GPA (Undergraduate Career Totals appears near end)
+    cum_gpa = ""
+    for ln in lines:
+        m = _CUM_GPA_RE.search(ln)
+        if m:
+            cum_gpa = m.group(1)
+
     first_name = last_name = ""
     if full_name:
         parts = [p for p in full_name.replace(",", " ").split() if p]
@@ -238,6 +248,7 @@ def _parse_student_header(lines: list, source_file: str) -> dict:
         "full_name": full_name, "first_name": first_name, "last_name": last_name,
         "student_id": student_id, "email": email,
         "transcript_date": tdate_iso, "source_file": source_file,
+        "cum_gpa": cum_gpa,
     }
 
 
@@ -759,7 +770,7 @@ def _load_minor_index() -> dict:
     return {}
 
 
-def fill_pathway(transcript_csv: Path, extra_minor_code: str = None) -> Path:
+def fill_pathway(transcript_csv: Path, extra_minor_codes: list = None) -> Path:
     """Map transcript courses to curriculum slots. Returns filled_pathway CSV path."""
     tx = pd.read_csv(transcript_csv, engine="python")
     if "course_id" not in tx.columns:
@@ -896,6 +907,15 @@ def fill_pathway(transcript_csv: Path, extra_minor_code: str = None) -> Path:
     ]
     unmapped_rows = []
     for _, r in tx_unmapped.sort_values(["course_id_norm", "term_code"]).iterrows():
+        _cid_n = str(r.get("course_id_norm", norm_id(r.get("course_id", "")))).strip()
+        if _cid_n in ah_ids:
+            _hint = "May count as Gen Ed: Arts & Humanities"
+        elif _cid_n in ss_ids:
+            _hint = "May count as Gen Ed: Social Science"
+        elif _cid_n in te_ids:
+            _hint = "May count as Technical Elective"
+        else:
+            _hint = ""
         unmapped_rows.append({
             "term_id": "UNMAPPED", "term_label": "Unmapped from Transcript",
             "slot_course_id": "", "slot_course_name": "", "credits": "", "bucket": "",
@@ -903,6 +923,7 @@ def fill_pathway(transcript_csv: Path, extra_minor_code: str = None) -> Path:
             "match_course_id": r.get("course_id", ""), "match_course_name": r.get("course_name", ""),
             "match_term_code": r.get("term_code", ""), "match_grade": r.get("grade", ""),
             "match_status": r.get("attempt_status", ""), "source_track": track,
+            "unmapped_hint": _hint,
         })
 
     filled_df["__order"] = 1
@@ -1003,16 +1024,19 @@ def fill_pathway(transcript_csv: Path, extra_minor_code: str = None) -> Path:
             })
             combined = pd.concat([combined, pd.DataFrame([placeholder])], ignore_index=True)
 
-    # ── extra (undeclared) minor added by user ────────────────────────────────
-    if extra_minor_code:
+    # ── extra (undeclared) minors added by user ───────────────────────────────
+    if extra_minor_codes:
         _idx = _load_minor_index()
-        _dname = _idx.get(extra_minor_code, extra_minor_code.title())
-        _mcsv = _resource_path(f"minors/minor_{extra_minor_code}.csv")
-        if _mcsv.exists():
-            _mrows = _process_minor(_mcsv, tx, ever_met_min,
-                                    extra_minor_code, _dname, track)
-            if _mrows:
-                combined = pd.concat([combined, pd.DataFrame(_mrows)], ignore_index=True)
+        for _code in extra_minor_codes:
+            _code = str(_code).strip().upper()
+            if not _code:
+                continue
+            _dname = _idx.get(_code, _code.title())
+            _mcsv = _resource_path(f"minors/minor_{_code}.csv")
+            if _mcsv.exists():
+                _mrows = _process_minor(_mcsv, tx, ever_met_min, _code, _dname, track)
+                if _mrows:
+                    combined = pd.concat([combined, pd.DataFrame(_mrows)], ignore_index=True)
 
     # ── propagate student identity into every row ──────────────────────────────
     _sname = ""
@@ -1030,6 +1054,14 @@ def fill_pathway(transcript_csv: Path, extra_minor_code: str = None) -> Path:
     combined["student_name"]       = _sname
     combined["student_id"]         = _sid
     combined["student_start_year"] = start_year if start_year else ""
+
+    _cum_gpa = ""
+    if "cum_gpa" in tx.columns:
+        _gv = tx["cum_gpa"].dropna().astype(str).str.strip()
+        _gv = _gv[_gv.ne("") & _gv.ne("nan")]
+        if not _gv.empty:
+            _cum_gpa = _gv.iloc[0]
+    combined["cum_gpa"] = _cum_gpa
 
     out_path = transcript_csv.with_suffix(".filled_pathway.csv")
     combined.to_csv(out_path, index=False)
@@ -1277,6 +1309,26 @@ def build_html(df: pd.DataFrame) -> str:
         else:
             unmapped.append(row)
 
+    # ── credit / GPA stats ────────────────────────────────────────────────────
+    cum_gpa = first_nonempty(find_col("cum_gpa")) or ""
+    _stat_rows = sum(grid.values(), []) + sum(elects.values(), [])
+    _earned_cr = _inprog_cr = _total_cr = 0.0
+    for _r in _stat_rows:
+        try:
+            cr = float(_r.get("credits", 0) or 0)
+        except (ValueError, TypeError):
+            cr = 0.0
+        _total_cr += cr
+        vs = str(_r.get("viz_status", "")).lower()
+        if vs == "green":
+            _earned_cr += cr
+        elif vs == "blue":
+            _inprog_cr += cr
+    _remaining_cr = max(_total_cr - _earned_cr - _inprog_cr, 0.0)
+
+    def _cr(v):
+        return int(v) if v == int(v) else round(v, 1)
+
     # ── course box renderer ───────────────────────────────────────────────────
     def course_box(row: dict) -> str:
         cid   = norm_id(row.get("slot_course_id", ""))
@@ -1439,15 +1491,13 @@ def build_html(df: pd.DataFrame) -> str:
             f'</div>'
         )
 
-    # ── "Add Minor Pathway" button (shown only when no minor declared) ────────
-    add_minor_html = ""
-    if not minors:
-        add_minor_html = (
-            '<div id="minor-pathway-bar">'
-            '<a href="/select-minor?session=__MINOR_SESSION_ID__" id="add-minor-btn">'
-            '+ Add Minor Pathway <span style="font-size:.7rem;opacity:.6">(Beta)</span></a>'
-            '</div>'
-        )
+    # ── "Add Minor Pathway" button (always shown so multiple minors can be added) ──
+    add_minor_html = (
+        '<div id="minor-pathway-bar">'
+        '<a href="/select-minor?session=__MINOR_SESSION_ID__" id="add-minor-btn">'
+        '+ Add Minor Pathway <span style="font-size:.7rem;opacity:.6">(Beta)</span></a>'
+        '</div>'
+    )
 
     # ── unmapped ──────────────────────────────────────────────────────────────
     unmapped_html = ""
@@ -1459,11 +1509,13 @@ def build_html(df: pd.DataFrame) -> str:
             cname = str(r.get("match_course_name","") or r.get("slot_course_name","")).strip()
             if not cid or cid.lower() in ("nan", ""):
                 continue
+            hint = str(r.get("unmapped_hint","")).strip()
+            hint_html = f'<span class="chip-hint">{hint}</span>' if hint else ""
             items += (
             f'<div class="unmapped-chip" draggable="true" '
             f'data-cid="{cid}" data-cname="{cname}" '
             f'title="Drag onto a course slot to assign as override">'
-            f'{cid} \u2014 {cname}</div>'
+            f'{cid} \u2014 {cname}{hint_html}</div>'
         )
         unmapped_html = (
             f'<div id="unmapped">'
@@ -1490,6 +1542,12 @@ body{{font-family:"Segoe UI",Arial,sans-serif;background:#1a1a2e;color:#e0e0e0;m
 #page-header h1{{font-size:1.35rem;color:#e0e0e0}}
 #page-header .student-name{{font-size:1.1rem;font-weight:700;color:#ffffff;margin-top:6px}}
 #page-header .meta{{font-size:.88rem;color:#8090b0;margin-top:3px}}
+.stats-bar{{display:flex;gap:10px;align-items:center;justify-content:center;margin-top:8px;flex-wrap:wrap}}
+.stat{{display:flex;flex-direction:column;align-items:center;background:#0f3460;border-radius:6px;padding:4px 12px}}
+.stat-label{{font-size:.65rem;color:#8090b0;text-transform:uppercase;letter-spacing:.05em}}
+.stat-val{{font-size:.95rem;font-weight:700;color:#a0c4ff}}
+.stat-sep{{color:#3a4a6a;font-size:.85rem}}
+.chip-hint{{display:block;font-size:.65rem;color:#8090b0;margin-top:2px;font-style:italic}}
 #legend{{display:flex;gap:14px;flex-wrap:wrap;justify-content:center;margin-bottom:12px;font-size:.76rem}}
 .legend-item{{display:flex;align-items:center;gap:5px}}
 .legend-swatch{{width:13px;height:13px;border-radius:3px;border:1px solid rgba(255,255,255,.2);flex-shrink:0}}
@@ -1627,6 +1685,14 @@ td[data-slot-cid]{{cursor:pointer}}
   <h1>Curriculum Progress Report</h1>
   <div class="student-name">{student_name}</div>
   <div class="meta">{major} &bull; Start: {start_year}</div>
+  <div class="stats-bar">
+    <span class="stat"><span class="stat-label">Earned</span><span class="stat-val">{_cr(_earned_cr)} cr</span></span>
+    <span class="stat-sep">&bull;</span>
+    <span class="stat"><span class="stat-label">In Progress</span><span class="stat-val">{_cr(_inprog_cr)} cr</span></span>
+    <span class="stat-sep">&bull;</span>
+    <span class="stat"><span class="stat-label">Remaining</span><span class="stat-val">{_cr(_remaining_cr)} cr</span></span>
+    {"<span class='stat-sep'>&bull;</span><span class='stat'><span class='stat-label'>GPA</span><span class='stat-val'>" + cum_gpa + "</span></span>" if cum_gpa else ""}
+  </div>
 </div>
 <div id="legend">
   <div class="legend-item"><div class="legend-swatch" style="background:#1b4332;border-color:#2d6a4f"></div>Completed</div>
