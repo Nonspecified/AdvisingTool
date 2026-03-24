@@ -27,3 +27,6 @@ AdvisingBot.spec
 # OS
 .DS_Store
 Thumbs.db
+
+# Bug reports (may contain student names)
+bug_reports/

@@ -483,11 +483,11 @@ def _infer_major(df: pd.DataFrame) -> str:
 def _detect_track(major: str, first_year) -> str:
     reg = _load_registry()
     info = reg.get(major)
-    if not info or first_year is None:
+    if not info:
         return "UNKNOWN"
     variants = info.get("variants", ["default"])
     cutoff   = info.get("variant_cutoff_year")
-    if cutoff and len(variants) >= 2:
+    if cutoff and len(variants) >= 2 and first_year is not None:
         period = variants[1] if first_year >= cutoff else variants[0]
     else:
         period = variants[0]
@@ -646,11 +646,22 @@ def _best_attempts(tx: pd.DataFrame) -> pd.DataFrame:
     if "attempt_status" not in df.columns:
         df["attempt_status"] = df.apply(_attempt_status, axis=1)
     # Count failed/withdrawn attempts per course before deduplicating
-    fail_counts = (
-        df[df["attempt_status"].isin({"failed", "withdrawn"})]
-        .groupby("course_id_norm")
-        .size()
-        .rename("prior_fail_count")
+    fail_mask = df["attempt_status"].isin({"failed", "withdrawn"})
+    fail_rows = df[fail_mask].copy()
+    fail_counts = fail_rows.groupby("course_id_norm").size().rename("prior_fail_count")
+    # Build per-course list of failed attempt records (grade + term) for tooltips
+    def _fail_records(g):
+        recs = []
+        for _, r in g.sort_values("term_code", key=lambda s: s.astype(str).map(_term_sort_key)).iterrows():
+            grade = str(r.get("grade", "")).strip()
+            term  = str(r.get("term",  "")).strip()
+            if not grade or grade.lower() in ("nan", "none"):
+                grade = "W"
+            recs.append({"grade": grade, "term": term})
+        return json.dumps(recs[:4])
+    fail_records = (
+        fail_rows.groupby("course_id_norm").apply(_fail_records)
+        .rename("prior_fail_records")
     )
     df["__prio"] = df["attempt_status"].map(STATUS_PRIO).fillna(0)
     df["__y"]   = df["term_code"].astype(str).map(lambda s: _term_sort_key(s)[0])
@@ -659,7 +670,9 @@ def _best_attempts(tx: pd.DataFrame) -> pd.DataFrame:
                         ascending=[True, False, True, True])
     best = df.drop_duplicates("course_id_norm", keep="first").drop(columns=["__prio", "__y", "__t"])
     best = best.join(fail_counts, on="course_id_norm")
-    best["prior_fail_count"] = best["prior_fail_count"].fillna(0).astype(int)
+    best = best.join(fail_records, on="course_id_norm")
+    best["prior_fail_count"]   = best["prior_fail_count"].fillna(0).astype(int)
+    best["prior_fail_records"] = best["prior_fail_records"].fillna("[]")
     return best.set_index("course_id_norm")
 
 
@@ -770,7 +783,7 @@ def _load_minor_index() -> dict:
     return {}
 
 
-def fill_pathway(transcript_csv: Path, extra_minor_codes: list = None) -> Path:
+def fill_pathway(transcript_csv: Path, extra_minor_codes: list = None, track_override: str = None) -> Path:
     """Map transcript courses to curriculum slots. Returns filled_pathway CSV path."""
     tx = pd.read_csv(transcript_csv, engine="python")
     if "course_id" not in tx.columns:
@@ -782,7 +795,7 @@ def fill_pathway(transcript_csv: Path, extra_minor_codes: list = None) -> Path:
 
     major      = _infer_major(tx)
     start_year = _first_class_year(tx)
-    track      = _detect_track(major, start_year)
+    track      = track_override or _detect_track(major, start_year)
 
     cur_path = _pick_curriculum_csv(track)
     if cur_path is None:
@@ -855,6 +868,8 @@ def fill_pathway(transcript_csv: Path, extra_minor_codes: list = None) -> Path:
         if cidn in best_map.index and "prior_fail_count" in best_map.columns:
             pfc = best_map.loc[cidn, "prior_fail_count"]
             filled["prior_fail_count"] = int(pfc) if pd.notna(pfc) else 0
+            pfr = best_map.loc[cidn, "prior_fail_records"] if "prior_fail_records" in best_map.columns else "[]"
+            filled["prior_fail_records"] = pfr if pd.notna(pfr) else "[]"
         out_rows.append(filled)
 
     filled_df = pd.DataFrame(out_rows)
@@ -1343,7 +1358,19 @@ def build_html(df: pd.DataFrame) -> str:
         creds_h = f'<span class="credits">{creds} cr</span>' if creds not in ("", "nan") else ""
         _pf = row.get("prior_fail_count", 0)
         n_dots = min(int(_pf if (_pf == _pf and _pf) else 0), 4)
-        dots_h = ('<div class="attempt-dots">' + '<span class="attempt-dot"></span>' * n_dots + '</div>') if n_dots > 0 else ""
+        if n_dots > 0:
+            try:
+                _recs = json.loads(str(row.get("prior_fail_records", "[]")) or "[]")
+            except (ValueError, TypeError):
+                _recs = []
+            _dot_spans = ""
+            for _i in range(n_dots):
+                _rec = _recs[_i] if _i < len(_recs) else {}
+                _tip = (_rec.get("grade") or "?") + (" · " + _rec["term"] if _rec.get("term") else "")
+                _dot_spans += f'<span class="attempt-dot" data-attempt="{_tip}" title="{_tip}"></span>'
+            dots_h = f'<div class="attempt-dots">{_dot_spans}</div>'
+        else:
+            dots_h = ""
         return (
             f'<div class="course-box {status}" id="{elem_id}" '
             f'data-cid="{cid}" data-prereqs=\'{prereq_ids}\' data-coreqs=\'{coreq_ids}\' '
@@ -1491,13 +1518,7 @@ def build_html(df: pd.DataFrame) -> str:
             f'</div>'
         )
 
-    # ── "Add Minor Pathway" button (always shown so multiple minors can be added) ──
-    add_minor_html = (
-        '<div id="minor-pathway-bar">'
-        '<a href="/select-minor?session=__MINOR_SESSION_ID__" id="add-minor-btn">'
-        '+ Add Minor Pathway <span style="font-size:.7rem;opacity:.6">(Beta)</span></a>'
-        '</div>'
-    )
+    add_minor_html = ""  # minor management moved to nav bar panel
 
     # ── unmapped ──────────────────────────────────────────────────────────────
     unmapped_html = ""
@@ -1568,7 +1589,11 @@ body{{font-family:"Segoe UI",Arial,sans-serif;background:#1a1a2e;color:#e0e0e0;m
 .course-box.locked{{background:#1c1c1c;border:1.5px solid #333;color:#484848;opacity:.55}}
 .course-box.nextelig{{background:#1c1500;border:2px dashed #ff8c00;box-shadow:0 0 0 2px #d4aa00;color:#ffe0a0;opacity:.85}}
 .attempt-dots{{position:absolute;bottom:4px;left:4px;display:flex;gap:3px}}
-.attempt-dot{{width:7px;height:7px;background:#cc2222;border-radius:50%;flex-shrink:0}}
+.attempt-dot{{width:7px;height:7px;background:#cc2222;border-radius:50%;flex-shrink:0;position:relative;cursor:default}}
+.attempt-dot:hover::after{{content:attr(data-attempt);position:absolute;bottom:130%;left:50%;
+  transform:translateX(-50%);background:#1a1a2e;color:#e0e0e0;border:1px solid #0f3460;
+  border-radius:4px;padding:3px 7px;font-size:.68rem;white-space:nowrap;z-index:500;
+  pointer-events:none;box-shadow:0 2px 8px rgba(0,0,0,.5)}}
 .cid{{font-size:.68rem;font-weight:700;letter-spacing:.02em}}
 .cname{{font-size:.62rem;line-height:1.3;margin-top:2px}}
 .meta{{font-size:.60rem;margin-top:3px;display:flex;gap:6px;opacity:.8}}
@@ -1599,11 +1624,8 @@ body{{font-family:"Segoe UI",Arial,sans-serif;background:#1a1a2e;color:#e0e0e0;m
 .pool-opt-item{{font-size:.65rem;padding:3px 4px;color:#c9d1d9;white-space:nowrap}}
 .pool-opt-cid{{font-weight:700;color:#a0c4ff}}
 #arrows-svg{{position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:5}}
-#fixed-btns{{position:fixed;bottom:16px;right:16px;display:flex;flex-direction:column;gap:6px;z-index:100}}
-#arrow-toggle,#print-btn{{background:#0f3460;color:#a0c4ff;border:1px solid #1565c0;border-radius:6px;padding:7px 14px;font-size:.78rem;cursor:pointer}}
-#arrow-toggle:hover,#print-btn:hover{{background:#1565c0;color:#fff}}
 @media print{{
-  #fixed-btns,#arrows-svg,#legend{{display:none!important}}
+  #arrows-svg,#legend{{display:none!important}}
   body{{background:#fff;color:#111;padding:0}}
   #page-header{{background:#fff;border:1px solid #ccc;color:#111}}
   #page-header h1,#page-header .student-name{{color:#111}}
@@ -1712,10 +1734,6 @@ td[data-slot-cid]{{cursor:pointer}}
 {minors_html}
 {unmapped_html}
 {table_html}
-<div id="fixed-btns">
-  <button id="arrow-toggle" onclick="toggleArrows()">Hide Prereq Arrows</button>
-  <button id="print-btn" onclick="window.print()">Print / Save PDF</button>
-</div>
 <script>
 (function(){{
   var svg=document.getElementById('arrows-svg');
@@ -1781,7 +1799,8 @@ td[data-slot-cid]{{cursor:pointer}}
   window.toggleArrows=function(){{
     arrowsVisible=!arrowsVisible;
     svg.style.display=arrowsVisible?'':'none';
-    document.getElementById('arrow-toggle').textContent=arrowsVisible?'Hide Prereq Arrows':'Show Prereq Arrows';
+    var cb=document.getElementById('arrow-toggle-cb');
+    if(cb) cb.checked=arrowsVisible;
   }};
   window.addEventListener('load',drawArrows);
   window.addEventListener('resize',drawArrows);
