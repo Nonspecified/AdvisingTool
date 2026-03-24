@@ -217,6 +217,24 @@ def select_minor():
                                   minors=minors)
 
 
+@app.route("/remove-minor", methods=["GET"])
+def remove_minor():
+    session_id = request.args.get("session", "")
+    if not session_id or session_id not in _sessions:
+        return redirect("/")
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp = Path(tmpdir)
+        csv_path = tmp / "transcript.csv"
+        csv_path.write_text(_sessions[session_id]["transcript_csv"], encoding="utf-8")
+
+        filled_csv = fill_pathway(csv_path)  # no extra minor
+        html_path = generate_html(filled_csv)
+        html_content = Path(html_path).read_text(encoding="utf-8")
+
+    return _inject_chrome(html_content, session_id), 200, {"Content-Type": "text/html; charset=utf-8"}
+
+
 @app.route("/apply-minor", methods=["POST"])
 def apply_minor():
     session_id = request.form.get("session", "")

@@ -596,6 +596,7 @@ def _process_minor(minor_csv_path, tx: pd.DataFrame, ever_met_min: set,
             "notes":            str(row.get("notes", "")),
             "minor_slot_type":       slot_type,
             "minor_pool_id":         pool_id,
+            "minor_pool_label":      str(row.get("pool_label", "")).strip(),
             "minor_pool_requirement": str(row.get("pool_requirement", "")),
             "minor_pool_slots_done":   ps.get("done", 0),
             "minor_pool_slots_needed": ps.get("needed", 1),
@@ -1267,6 +1268,7 @@ def build_html(df: pd.DataFrame) -> str:
                     "needed":     row.get("minor_pool_slots_needed", 1),
                     "count_type": row.get("minor_pool_count_type", "courses"),
                     "total_avail":row.get("minor_pool_total_avail", 0),
+                    "label":      str(row.get("minor_pool_label", "")).strip(),
                 }
         elif bucket in ELECTIVE_BUCKETS:
             elects[bucket].append(row)
@@ -1287,7 +1289,8 @@ def build_html(df: pd.DataFrame) -> str:
         elem_id = css_id(cid) if cid else "c-" + re.sub(r"\W+", "-", cname)[:20]
         grade_h = f'<span class="grade">{grade}</span>' if grade not in ("", "nan") else ""
         creds_h = f'<span class="credits">{creds} cr</span>' if creds not in ("", "nan") else ""
-        n_dots = min(int(row.get("prior_fail_count", 0) or 0), 4)
+        _pf = row.get("prior_fail_count", 0)
+        n_dots = min(int(_pf if (_pf == _pf and _pf) else 0), 4)
         dots_h = ('<div class="attempt-dots">' + '<span class="attempt-dot"></span>' * n_dots + '</div>') if n_dots > 0 else ""
         return (
             f'<div class="course-box {status}" id="{elem_id}" '
@@ -1341,46 +1344,98 @@ def build_html(df: pd.DataFrame) -> str:
         dname = mdata["display_name"]
         rows  = mdata["rows"]
         pools = mdata["pools"]
-        inner = ""
-        # Group: required first, then each pool
-        req_rows  = [r for r in rows if str(r.get("minor_slot_type","")).lower() != "pool"]
-        pool_rows = [r for r in rows if str(r.get("minor_slot_type","")).lower() == "pool"]
 
-        if req_rows:
-            inner += '<div class="minor-group"><div class="minor-group-hdr">Required</div>'
-            inner += "".join(course_box(r) for r in req_rows)
-            inner += "</div>"
+        def _pid(r):
+            v = r.get("minor_pool_id", "")
+            s = str(v).strip() if v is not None else ""
+            return s if s.lower() not in ("", "nan") else ""
+        req_rows  = [r for r in rows if not _pid(r)]
+        pool_rows = [r for r in rows if _pid(r)]
 
+        all_boxes = ""
+
+        # Required courses — plain boxes in order
+        for r in req_rows:
+            all_boxes += course_box(r)
+
+        # Pool groups — filled boxes first, then dashed elective slots
         if pool_rows:
             pool_ids_seen = []
             for r in pool_rows:
                 pid = str(r.get("minor_pool_id","")).strip()
                 if pid not in pool_ids_seen:
                     pool_ids_seen.append(pid)
+
             for pid in pool_ids_seen:
                 pid_rows = [r for r in pool_rows if str(r.get("minor_pool_id","")).strip() == pid]
-                ps = pools.get(pid, {})
-                done   = ps.get("done", 0)
-                needed = ps.get("needed", 1)
-                ct     = ps.get("count_type", "courses")
-                total  = ps.get("total_avail", len(pid_rows))
-                label  = ps.get("label", "")
-                done_disp = int(done) if done == int(done) else round(done, 1)
-                check = "✓" if done_disp >= needed else "○"
-                hdr_text = label if label and label.lower() not in ("", "nan") else f"Choose {needed} of {total} {ct}"
-                inner += (
-                    f'<div class="minor-group">'
-                    f'<div class="minor-group-hdr">{hdr_text}'
-                    f' &nbsp;<span class="pool-progress">{check} {done_disp} / {needed} done</span>'
-                    f'</div>'
-                )
-                inner += "".join(course_box(r) for r in pid_rows)
-                inner += "</div>"
+                ps       = pools.get(pid, {})
+                needed   = int(ps.get("needed", 1) or 1)
+                label    = ps.get("label", "") or str(pid_rows[0].get("minor_pool_label","")).strip()
+                total    = ps.get("total_avail", len(pid_rows))
+                short_label = label if label and label.lower() not in ("","nan") else "Elective"
+                box_label = short_label[:28] + ("…" if len(short_label) > 28 else "")
 
+                # Matched = student has taken this specific course (match_grade present)
+                matched   = [r for r in pid_rows
+                             if str(r.get("match_grade","")).strip() not in ("","nan")
+                             or str(r.get("viz_status","")).strip() in ("green","blue")]
+                # Options = pool rows with a real course_id (exclude blank descriptor rows)
+                options   = [r for r in pid_rows
+                             if str(r.get("slot_course_id","")).strip()
+                             and r not in matched]
+                still_needed = max(0, needed - len(matched))
+
+                # Courses the student already took from this pool
+                for r in matched:
+                    all_boxes += course_box(r)
+
+                # Empty elective slots
+                if still_needed > 0:
+                    # Auto-fill when only one option remains (no real choice)
+                    if len(options) == 1:
+                        for _ in range(still_needed):
+                            all_boxes += course_box(options[0])
+                    elif options:
+                        opts_html = "".join(
+                            f'<div class="pool-opt-item" data-cid="{norm_id(str(r.get("slot_course_id",""))).strip()}"'
+                            f' data-cname="{str(r.get("slot_course_name","")).strip()}"'
+                            f' data-credits="{str(r.get("credits","")).strip()}"'
+                            f' onclick="poolOptSelect(event,this)">'
+                            f'<span class="pool-opt-cid">{norm_id(str(r.get("slot_course_id",""))).strip()}</span>'
+                            f' {str(r.get("slot_course_name","")).strip()}'
+                            f'</div>'
+                            for r in options
+                        )
+                        meta = f'<span class="credits">{needed} of {total}</span>'
+                        for _ in range(still_needed):
+                            all_boxes += (
+                                f'<div class="course-box pool-slot" data-pool-id="{pid}" data-chosen=""'
+                                f' onclick="poolSlotClick(event,this)">'
+                                f'<div class="cid">▾ Elective</div>'
+                                f'<div class="cname">{box_label}</div>'
+                                f'<div class="meta">{meta}</div>'
+                                f'<div class="pool-dropdown">{opts_html}</div>'
+                                f'</div>'
+                            )
+                    else:
+                        # No specific options known — show a generic advisory slot
+                        for _ in range(still_needed):
+                            all_boxes += (
+                                f'<div class="course-box pool-slot">'
+                                f'<div class="cid">Elective</div>'
+                                f'<div class="cname">{box_label}</div>'
+                                f'<div class="meta"><span class="credits">see advisor</span></div>'
+                                f'</div>'
+                            )
+
+        remove_btn = (
+            f'<a href="/remove-minor?session=__MINOR_SESSION_ID__&code={mcode}"'
+            f' class="minor-remove-btn">✕ Remove</a>'
+        )
         minors_html += (
             f'<div class="minor-section">'
-            f'<h3 class="minor-title">{dname} Minor Requirements</h3>'
-            f'<div class="minor-body">{inner}</div>'
+            f'<h3 class="minor-title"><span>{dname} Minor</span>{remove_btn}</h3>'
+            f'<div class="minor-flat-row">{all_boxes}</div>'
             f'</div>'
         )
 
@@ -1390,7 +1445,7 @@ def build_html(df: pd.DataFrame) -> str:
         add_minor_html = (
             '<div id="minor-pathway-bar">'
             '<a href="/select-minor?session=__MINOR_SESSION_ID__" id="add-minor-btn">'
-            '+ Add Minor Pathway</a>'
+            '+ Add Minor Pathway <span style="font-size:.7rem;opacity:.6">(Beta)</span></a>'
             '</div>'
         )
 
@@ -1470,11 +1525,21 @@ body{{font-family:"Segoe UI",Arial,sans-serif;background:#1a1a2e;color:#e0e0e0;m
 #add-minor-btn{{display:inline-block;background:#0f3460;color:#a0c4ff;border:1px solid #1565c0;border-radius:6px;padding:7px 16px;font-size:.82rem;text-decoration:none;font-family:"Segoe UI",Arial,sans-serif}}
 #add-minor-btn:hover{{background:#1565c0;color:#fff}}
 .minor-section{{margin-top:10px;background:#16213e;border:1px solid #0f3460;border-radius:8px;padding:10px}}
-.minor-title{{font-size:.85rem;font-weight:700;color:#c9d1d9;margin-bottom:8px;padding-bottom:4px;border-bottom:1px solid #0f3460}}
-.minor-body{{display:flex;gap:14px;flex-wrap:wrap;align-items:flex-start}}
-.minor-group{{flex:1;min-width:160px}}
-.minor-group-hdr{{font-size:.72rem;font-weight:700;color:#a0c4ff;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px}}
-.pool-progress{{font-weight:400;color:#90caf9;text-transform:none;letter-spacing:0}}
+.minor-title{{font-size:.85rem;font-weight:700;color:#c9d1d9;margin:0 0 8px;padding-bottom:4px;border-bottom:1px solid #0f3460;display:flex;align-items:center;justify-content:space-between}}
+.minor-remove-btn{{font-size:.72rem;font-weight:400;color:#8090b0;text-decoration:none;padding:2px 8px;border:1px solid #333;border-radius:4px;white-space:nowrap}}
+.minor-remove-btn:hover{{color:#ff8080;border-color:#663333;background:#1c1010}}
+.minor-flat-row{{display:flex;flex-wrap:wrap;gap:5px}}
+.minor-flat-row .course-box{{flex:0 0 auto;min-width:88px;max-width:145px}}
+.pool-slot{{cursor:pointer;position:relative;background:#0d1b2e!important;border-style:dashed!important}}
+.pool-slot .cid{{color:#6699cc}}
+.pool-slot .cname{{color:#8090b0}}
+.pool-chosen{{background:#0d2137!important;border-color:#1565c0!important;border-style:solid!important}}
+.pool-chosen .cid{{color:#90caf9}}
+.pool-chosen .cname{{color:#c9d1d9}}
+.pool-dropdown{{display:none;position:absolute;z-index:200;background:#0d1b2e;border:1px solid #1565c0;border-radius:6px;padding:8px;min-width:220px;top:calc(100% + 4px);left:0;box-shadow:0 4px 16px rgba(0,0,0,.7);max-height:240px;overflow-y:auto}}
+.pool-dropdown.show{{display:block}}
+.pool-opt-item{{font-size:.65rem;padding:3px 4px;color:#c9d1d9;white-space:nowrap}}
+.pool-opt-cid{{font-weight:700;color:#a0c4ff}}
 #arrows-svg{{position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:5}}
 #fixed-btns{{position:fixed;bottom:16px;right:16px;display:flex;flex-direction:column;gap:6px;z-index:100}}
 #arrow-toggle,#print-btn{{background:#0f3460;color:#a0c4ff;border:1px solid #1565c0;border-radius:6px;padding:7px 14px;font-size:.78rem;cursor:pointer}}
@@ -1629,6 +1694,7 @@ td[data-slot-cid]{{cursor:pointer}}
   function drawArrows(){{
     svg.querySelectorAll('.prereq-arrow').forEach(function(e){{e.remove();}});
     document.querySelectorAll('.course-box[data-prereqs]').forEach(function(targetEl){{
+      if(targetEl.closest('.minor-section')) return;
       var prereqs,coreqs;
       try{{prereqs=JSON.parse(targetEl.getAttribute('data-prereqs')||'[]');}}catch(e){{prereqs=[];}}
       try{{coreqs=JSON.parse(targetEl.getAttribute('data-coreqs')||'[]');}}catch(e){{coreqs=[];}}
@@ -1820,6 +1886,41 @@ td[data-slot-cid]{{cursor:pointer}}
     }});
   }}
 }})();
+// ── Pool slot dropdowns ──────────────────────────────────────────────────
+function poolSlotClick(evt, el) {{
+  evt.stopPropagation();
+  var dd = el.querySelector('.pool-dropdown');
+  var wasShown = dd.classList.contains('show');
+  document.querySelectorAll('.pool-dropdown.show').forEach(function(d){{d.classList.remove('show');}});
+  if (!wasShown) dd.classList.add('show');
+}}
+function poolOptSelect(evt, optEl) {{
+  evt.stopPropagation();
+  var slot = optEl.closest('.pool-slot');
+  var poolId = slot.getAttribute('data-pool-id');
+  var prevCid = slot.getAttribute('data-chosen');
+  var cid     = optEl.getAttribute('data-cid');
+  var cname   = optEl.getAttribute('data-cname');
+  var credits = optEl.getAttribute('data-credits');
+  // Restore previously chosen option in all sibling slots
+  if (prevCid) {{
+    document.querySelectorAll('.pool-slot[data-pool-id="' + poolId + '"] .pool-opt-item[data-cid="' + prevCid + '"]')
+      .forEach(function(o){{ o.style.display=''; }});
+  }}
+  // Update this slot's display
+  slot.querySelector('.cid').textContent = cid || '—';
+  slot.querySelector('.cname').textContent = cname;
+  slot.querySelector('.meta').innerHTML = credits ? '<span class="credits">' + credits + ' cr</span>' : '';
+  slot.setAttribute('data-chosen', cid);
+  slot.classList.add('pool-chosen');
+  slot.querySelector('.pool-dropdown').classList.remove('show');
+  // Hide chosen option in all sibling slots
+  document.querySelectorAll('.pool-slot[data-pool-id="' + poolId + '"] .pool-opt-item[data-cid="' + cid + '"]')
+    .forEach(function(o){{ o.style.display='none'; }});
+}}
+document.addEventListener('click', function() {{
+  document.querySelectorAll('.pool-dropdown.show').forEach(function(d){{d.classList.remove('show');}});
+}});
 </script>
 </body>
 </html>

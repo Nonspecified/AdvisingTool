@@ -1,9 +1,9 @@
 slot_type,course_id,course_name,credits,pool_id,pool_label,pool_requirement,prereq,coreq,min_grade,notes
 required,COMP.1010,Computing I,3,,,,,,, CS majors take COMP.1010; ECE majors take EECE.2160
 required,EECE.2650,Logic Design,3,,,,,,,
-required,EECE.3170,Microprocessor Design I,3,,,,,EECE.2650,,,Or COMP.2030 Assembly Language Programming
+required,EECE.3170,Microprocessor Design I,3,,,,,EECE.2650,,Or COMP.2030 Assembly Language Programming
 required,ENGN.2050,Statics,3,,,,,,,
-required,ENGN.2070,Dynamics,3,,,,,ENGN.2050,,,
+required,ENGN.2070,Dynamics,3,,,,,ENGN.2050,,
 required,COMP.4500,Mobile Robotics I,3,,,,,,,
 required,EECE.4560,Fundamentals of Robotics,3,,,,,,,Or EECE.5560
 pool,COMP.4200,Artificial Intelligence,3,pool_1,Robotics Elective,1 course,,,,Choose 1 of 14 electives
