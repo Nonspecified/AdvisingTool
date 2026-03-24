@@ -1,0 +1,12 @@
+slot_type,course_id,course_name,credits,pool_id,pool_label,pool_requirement,prereq,coreq,min_grade,notes
+required,PHYS.1410,Physics I,3,,,,,,, CS/non-honors track; or PHYS.1610 Honors Physics I
+required,PHYS.1410L,Physics I Lab,1,,,,,PHYS.1410,,Lab co-req with Physics I; or PHYS.1610L
+required,PHYS.1440,Physics II,3,,,,,,,Or PHYS.1640 Honors Physics II; prereq PHYS.1410
+required,PHYS.1440L,Physics II Lab,1,,,,,PHYS.1440,,Lab co-req with Physics II; or PHYS.1640L
+required,PHYS.2450,Physical Properties of Matter,3,,,,,,,Or PHYS.2690 Honors Physics III; prereq PHYS.1440
+required,PHYS.2100,Introduction to Modern Physics,3,,,,,,,
+pool,PHYS.2450L,Physics III Lab,1,pool_1,Physics III Lab Elective,1 course,,,,
+pool,PHYS.2610L,Physics of Materials & Devices Lab,1,pool_1,Physics III Lab Elective,1 course,,,,
+pool,PHYS.2620L,Principles in Laboratory Automation,1,pool_1,Physics III Lab Elective,1 course,,,,
+pool,,Physics Elective 3000+ level,3,pool_2,Upper-Level Physics Electives,6 credits,,,,Choose from PHYS courses at 3000-level or above
+pool,,Physics Elective 3000+ level,3,pool_2,Upper-Level Physics Electives,6 credits,,,,

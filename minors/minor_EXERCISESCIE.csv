@@ -1,0 +1,14 @@
+slot_type,course_id,course_name,credits,pool_id,pool_label,pool_requirement,prereq,coreq,min_grade,notes
+required,HSCI.1010,Anatomy and Physiology I,3,,,,,,HSCI.1030,B-,
+required,HSCI.1030,Anatomy and Physiology I Lab,1,,,,,,HSCI.1010,B-,
+required,HSCI.1020,Anatomy and Physiology II,3,,,,HSCI.1010,,HSCI.1040,B-,
+required,HSCI.1040,Anatomy and Physiology II Lab,1,,,,HSCI.1020 (pre/co),,,B-,
+required,EXER.3050,Exercise Physiology,3,,,,,"HSCI.1020, and HSCI.2510 or CHEM.1210 or HSCI.1900",EXER.3070,B-,
+required,EXER.3070,Exercise Physiology Laboratory,1,,,,,,EXER.3050,B-,
+required,EXER.4300,Exercise is Medicine,3,,,,ENGL.1020 and Junior or Senior status or permission of instructor,,,B-,
+pool,EXER.3350,Sport and Exercise Biomechanics,4,pool_1,Exercise Science Electives,7 credits,EXER.3050,,,B-,
+pool,EXER.4060,Foundation of Strength and Conditioning,3,pool_1,Exercise Science Electives,7 credits,EXER.3050,,EXER.4080,B-,
+pool,EXER.4080,Foundation of Strength and Conditioning Lab,1,pool_1,Exercise Science Electives,7 credits,,,EXER.4060,B-,
+pool,EXER.4200,Advanced Study in Exercise Science,3,pool_1,Exercise Science Electives,7 credits,EXER.3050,,,B-,
+pool,EXER.4240,Motor Control and Learning,3,pool_1,Exercise Science Electives,7 credits,EXER.3050,,,B-,Note: catalog restricts to Exercise Science students; verify minor eligibility with department
+pool,EXER.4260,Motor Control and Learning Lab,1,pool_1,Exercise Science Electives,7 credits,,,EXER.4240,B-,Note: catalog restricts to ES majors with senior standing; verify minor eligibility

@@ -1,0 +1,30 @@
+slot_type,course_id,course_name,credits,pool_id,pool_label,pool_requirement,prereq,coreq,min_grade,notes
+pool,ARSP.1010,Heritage and Values of the U.S. Air Force Part I,3,pool_1,Aerospace Studies (Air Force),6 credits,,,,,Credits vary 1-3; no military commitment required
+pool,ARSP.1020,Heritage and Values of the U.S. Air Force Part II,3,pool_1,Aerospace Studies (Air Force),6 credits,,,,,Credits vary 1-3; no military commitment required
+pool,ARSP.2010,Team and Leadership Fundamentals Part I,3,pool_1,Aerospace Studies (Air Force),6 credits,,,,,Credits vary 1-3; no military commitment required
+pool,ARSP.2020,Team and Leadership Fundamentals Part II,3,pool_1,Aerospace Studies (Air Force),6 credits,,,,,Credits vary 1-3; no military commitment required
+pool,ARSP.3010,Leading People and Effective Communication Part I,3,pool_1,Aerospace Studies (Air Force),6 credits,,,,,Credits vary 1-3; no military commitment required
+pool,ARSP.3020,Leading People and Effective Communication Part II,3,pool_1,Aerospace Studies (Air Force),6 credits,,,,,Credits vary 1-3; no military commitment required
+pool,ARSP.4010,National Security Affairs / Active Duty Prep Part I,3,pool_1,Aerospace Studies (Air Force),6 credits,,,,,Credits vary 1-3; no military commitment required
+pool,ARSP.4020,National Security Affairs / Active Duty Prep Part II,3,pool_1,Aerospace Studies (Air Force),6 credits,,,,,Credits vary 1-3; no military commitment required
+pool,ROTC.1400,Leadership and Personal Development (MSL 101),3,pool_2,Military Science (Army),2 courses,,,,,
+pool,ROTC.1700,Introduction to Tactical Leadership (MSL 102),3,pool_2,Military Science (Army),2 courses,,,,,
+pool,ROTC.2300,Foundations of Leadership (MSL 201),3,pool_2,Military Science (Army),2 courses,,,,,
+pool,ROTC.2400,Foundations of Tactical Leadership (MSL 202),3,pool_2,Military Science (Army),2 courses,,,,,
+pool,ROTC.3300,Adaptive Team Leadership (MSL 301),3,pool_2,Military Science (Army),2 courses,,,,,
+pool,ROTC.3400,Applied Team Leadership (MSL 302),3,pool_2,Military Science (Army),2 courses,,,,,
+pool,ROTC.4400,Adaptive Leadership (MSL 401),3,pool_2,Military Science (Army),2 courses,,,,,
+pool,ROTC.4500,Leadership in a Complex World (MSL 402),3,pool_2,Military Science (Army),2 courses,,,,,
+pool,CRIM.2480,Terrorism (International and Domestic),3,pool_3,Acceptable Electives,2 courses,,,,,
+pool,CRIM.2120,Weapons of Mass Destruction,3,pool_3,Acceptable Electives,2 courses,,,,,
+pool,ENGL.2510,War in Literature,3,pool_3,Acceptable Electives,2 courses,,,,,
+pool,HIST.2040,China & the Modern World,3,pool_3,Acceptable Electives,2 courses,,,,,
+pool,HIST.2420,World War II,3,pool_3,Acceptable Electives,2 courses,,,,,
+pool,HIST.3220,Chinese Foreign Policy,3,pool_3,Acceptable Electives,2 courses,,,,,
+pool,HIST.3560,Civil War and Reconstruction,3,pool_3,Acceptable Electives,2 courses,,,,,
+pool,HIST.3930,History of the Middle East and Islamic World,3,pool_3,Acceptable Electives,2 courses,,,,,
+pool,POLI.1010,Introduction to American Politics,3,pool_3,Acceptable Electives,2 courses,,,,,
+pool,POLI.1120,Introduction to Comparative Political Systems,3,pool_3,Acceptable Electives,2 courses,,,,,
+pool,POLI.1210,Introduction to International Relations,3,pool_3,Acceptable Electives,2 courses,,,,,
+pool,POLI.3380,Political Participation,3,pool_3,Acceptable Electives,2 courses,,,,,
+pool,POLI.3680,Middle Eastern Politics,3,pool_3,Acceptable Electives,2 courses,,,,,

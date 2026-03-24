@@ -1,0 +1,7 @@
+slot_type,course_id,course_name,credits,pool_id,pool_label,pool_requirement,prereq,coreq,min_grade,notes
+required,WLIT.1010,Italian 1 and Culture,3,,,,,,,
+required,WLIT.1020,Italian 2 and Culture,3,,,,,,,
+required,WLIT.2110,Italian 3 and Culture,3,,,,,,,
+required,WLIT.2120,Italian 4 and Culture,3,,,,,,,
+pool,,Italian Studies Elective,3,pool_1,Italian Studies Electives,2 to 4 courses,,,,,Choose from approved list; see advisor. At least 6 credits must be at 3000-level or above.
+pool,,Italian Studies Elective,3,pool_1,Italian Studies Electives,2 to 4 courses,,,,,Choose from approved list; see advisor. At least 6 credits must be at 3000-level or above.

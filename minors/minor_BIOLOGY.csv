@@ -1,0 +1,10 @@
+slot_type,course_id,course_name,credits,pool_id,pool_label,pool_requirement,prereq,coreq,min_grade,notes
+pool,BIOL 1110,Biological Sciences I,3,pool_intro,Choose one introductory biology year-sequence option,1 course,,,,Option A: BIOL 1110/1170L and BIOL 1120/1180L
+pool,BIOL 1170L,Biological Sciences I Lab,1,pool_intro,Choose one introductory biology year-sequence option,1 course,,,,Option A
+pool,BIOL 1120,Biological Sciences II,3,pool_intro,Choose one introductory biology year-sequence option,1 course,,,,Option A
+pool,BIOL 1180L,Biological Sciences II Lab,1,pool_intro,Choose one introductory biology year-sequence option,1 course,,,,Option A
+pool,LIFE 1010,Introductory Biology I,3,pool_intro,Choose one introductory biology year-sequence option,1 course,,,,Option B: LIFE 1010/1030L and LIFE 1020/1040L
+pool,LIFE 1030L,Introductory Biology I Lab,1,pool_intro,Choose one introductory biology year-sequence option,1 course,,,,Option B
+pool,LIFE 1020,Introductory Biology II,3,pool_intro,Choose one introductory biology year-sequence option,1 course,,,,Option B
+pool,LIFE 1040L,Introductory Biology II Lab,1,pool_intro,Choose one introductory biology year-sequence option,1 course,,,,Option B
+pool,,BIOL-prefix elective with lab,3,pool_biol,Choose 4 additional BIOL-prefix courses (3 or 4 credits each),4 courses,,,,Two of the four must include a lab component; at least 6 credits must be at 3000-level or above

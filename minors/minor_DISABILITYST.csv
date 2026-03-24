@@ -1,0 +1,10 @@
+slot_type,course_id,course_name,credits,pool_id,pool_label,pool_requirement,prereq,coreq,min_grade,notes
+required,PSYC.3630,Introduction to Disability Studies,3,,,,,,,,
+pool,ENGL.2580,Disability in Literature,3,pool_1,Core Electives,3 courses,,,,Max 9 PSYC credits toward minor
+pool,LGST.2500,Disability and the Law: Legal Rights of People with Disabilities,3,pool_1,Core Electives,3 courses,,,,Max 9 PSYC credits toward minor
+pool,PHIL.3105,Philosophy of Disability,3,pool_1,Core Electives,3 courses,,,,Max 9 PSYC credits toward minor
+pool,PSYC.3620,Psychology of Developmental Disabilities,3,pool_1,Core Electives,3 courses,,,,Max 9 PSYC credits toward minor
+pool,PSYC.4820,Developmental Disabilities Fieldwork: Service Provision,3,pool_1,Core Electives,3 courses,,,,Max 9 PSYC credits toward minor
+pool,PSYC.4830,Developmental Disabilities Fieldwork: Leadership and Advocacy,3,pool_1,Core Electives,3 courses,,,,Max 9 PSYC credits toward minor
+pool,SOCI.2250,Sociology of Disability,3,pool_1,Core Electives,3 courses,,,,Max 9 PSYC credits toward minor
+pool,,Additional approved elective,3,pool_2,Additional Electives,To reach 18 credits,,,, Directed Study/Community Service Learning/Independent Study or other approved courses in consultation with coordinator

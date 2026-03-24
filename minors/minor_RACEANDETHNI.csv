@@ -1,0 +1,8 @@
+slot_type,course_id,course_name,credits,pool_id,pool_label,pool_requirement,prereq,coreq,min_grade,notes
+pool,SOCI.2340,Race and Ethnicity,3,pool_1,Foundation Course,1 course,,,,Choose one of three foundation courses
+pool,PHIL.3080,Philosophy of Race and Gender,3,pool_1,Foundation Course,1 course,,,,
+pool,POLI.3490,Politics of Race and Ethnicity,3,pool_1,Foundation Course,1 course,,,,
+pool,,Race and Ethnic Studies Elective (Humanities),3,pool_2,Humanities Electives,1 course,,,,At least one course from English/History/Philosophy; see course listing
+pool,,Race and Ethnic Studies Elective (Social Sciences),3,pool_3,Social Sciences Electives,1 course,,,,At least one course from Criminal Justice/Political Science/Psychology/Sociology
+pool,,Race and Ethnic Studies Elective,3,pool_4,Additional Electives,6 credits,,,,Additional electives to reach 18 total credits; at least 2 courses at 3000/4000 level
+pool,,Race and Ethnic Studies Elective,3,pool_4,Additional Electives,6 credits,,,,

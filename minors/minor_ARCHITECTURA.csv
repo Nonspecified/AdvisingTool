@@ -1,0 +1,9 @@
+slot_type,course_id,course_name,credits,pool_id,pool_label,pool_requirement,prereq,coreq,min_grade,notes
+pool,ARCH 2060,History of Architecture,3,pool_foundation,Choose courses totaling 6 credits from the following,6 credits,,,,
+pool,ARCH 2500L,Introduction to Architectural Design,3,pool_foundation,Choose courses totaling 6 credits from the following,6 credits,,,,
+pool,ARCH 3140,American Architecture,3,pool_foundation,Choose courses totaling 6 credits from the following,6 credits,,,,
+pool,ARCH 3150,Modern Architecture,3,pool_foundation,Choose courses totaling 6 credits from the following,6 credits,,,,
+pool,ARCH 3400,Landscape Architecture for Climate Resilience,3,pool_foundation,Choose courses totaling 6 credits from the following,6 credits,,,,
+pool,ARCH 3550,The City and the Environment,3,pool_foundation,Choose courses totaling 6 credits from the following,6 credits,,,,
+pool,ARCH 3160,Architectural Utopias,3,pool_foundation,Choose courses totaling 6 credits from the following,6 credits,,,,
+pool,,Elective from Architectural Studies course listing,3,pool_electives,Choose 12 additional credits from Architectural Studies course listing,12 credits,,,,See Architectural Studies course listing for approved courses; min 6 credits at 3000-level or above

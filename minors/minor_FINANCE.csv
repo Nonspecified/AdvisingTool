@@ -1,0 +1,8 @@
+slot_type,course_id,course_name,credits,pool_id,pool_label,pool_requirement,prereq,coreq,min_grade,notes
+required,ACCT.2010,Accounting/Financial,3,,,,,,,,Minimum 2.700 GPA across all minor courses
+required,ECON.2110,Statistics I,3,,,,MATH.1200 or MATH.1205 or MATH.1210 or MATH.1220 or MATH.1225 or MATH.1230 or MATH.1250 or MATH.1270 or MATH.1280 or MATH.1290 or MATH.1310 or MATH.1320 or MATH.1380 or MATH.1410,,,,Minimum 2.700 GPA; or equivalent statistics course
+required,ECON.2010,Principles of Microeconomics,3,,,,,,,,Minimum 2.700 GPA across all minor courses
+required,FINA.3010,Financial Management,3,,,,"ECON.2010 and ACCT.2010, or business minor and ACCT.2010",,,,Minimum 2.700 GPA across all minor courses
+required,FINA.3110,Financial Statement Analysis,3,,,,FINA.3010,,,,Minimum 2.700 GPA across all minor courses
+required,FINA.3210,Investments & Portfolio Analysis,3,,,,"ECON.2010 and ACCT.2010, or business minor and ACCT.2010",,,,Minimum 2.700 GPA across all minor courses
+required,FINA.3310,Principles of Corporate Finance,3,,,,FINA.3010,,,,Minimum 2.700 GPA across all minor courses

@@ -1,0 +1,21 @@
+slot_type,course_id,course_name,credits,pool_id,pool_label,pool_requirement,prereq,coreq,min_grade,notes
+required,COMP.1010,Computing I,3,,,,,,, CS majors take COMP.1010; ECE majors take EECE.2160
+required,EECE.2650,Logic Design,3,,,,,,,
+required,EECE.3170,Microprocessor Design I,3,,,,,EECE.2650,,,Or COMP.2030 Assembly Language Programming
+required,ENGN.2050,Statics,3,,,,,,,
+required,ENGN.2070,Dynamics,3,,,,,ENGN.2050,,,
+required,COMP.4500,Mobile Robotics I,3,,,,,,,
+required,EECE.4560,Fundamentals of Robotics,3,,,,,,,Or EECE.5560
+pool,COMP.4200,Artificial Intelligence,3,pool_1,Robotics Elective,1 course,,,,Choose 1 of 14 electives
+pool,COMP.4240,Introduction to Reinforcement Learning,3,pool_1,Robotics Elective,1 course,,,,Or COMP.5435
+pool,COMP.4510,Mobile Robotics II,3,pool_1,Robotics Elective,1 course,,,,
+pool,MECH.4530,Mechatronics,3,pool_1,Robotics Elective,1 course,,,,
+pool,EECE.4520,Microprocessor Systems II & Embedded Systems,3,pool_1,Robotics Elective,1 course,,,,Or EECE.5520
+pool,EECE.5800,Advanced Robotics in the Real-World,3,pool_1,Robotics Elective,1 course,,,,
+pool,COMP.5495,Robot Learning,3,pool_1,Robotics Elective,1 course,,,,
+pool,COMP.5500,Topics: Human-Robot Interaction,3,pool_1,Robotics Elective,1 course,,,,
+pool,MECH.5300,Autonomous Robotic Systems,3,pool_1,Robotics Elective,1 course,,,,
+pool,MECH.5315,Modern Control Systems,3,pool_1,Robotics Elective,1 course,,,,
+pool,MECH.5540,Dynamic Systems and Controls,3,pool_1,Robotics Elective,1 course,,,,
+pool,MECH.5550,Networked Multi-Agent Systems,3,pool_1,Robotics Elective,1 course,,,,
+pool,MECH.5790,Robotics,3,pool_1,Robotics Elective,1 course,,,,

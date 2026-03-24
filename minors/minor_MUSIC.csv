@@ -1,0 +1,25 @@
+slot_type,course_id,course_name,credits,pool_id,pool_label,pool_requirement,prereq,coreq,min_grade,notes
+required,MUTH.1100,Basic Music Theory,1,,,,,,,
+required,MUHI.1040,Musical Practices 1,2,,,,,,,
+required,MUHI.1050,Musical Practices 2,2,,,,,,,
+pool,,Any music ensemble,1,pool_1,Ensemble Requirement,6 credits,,,,"Any combination of ensembles totaling 6 credits; some ensembles require audition"
+pool,MUED.1510,Introduction to Music Education,3,pool_2,Music Electives,12 credits,,,,"Requires permission of instructor"
+pool,MUED.1000,Observation Lab 1,1,pool_2,Music Electives,12 credits,,,,"Paired with MUED.1510; requires permission of instructor"
+pool,MUED.1410,Introduction to Brass Pedagogy,3,pool_2,Music Electives,12 credits,,,,"Requires permission of instructor"
+pool,MUED.1440,Introduction to Woodwind Pedagogy,3,pool_2,Music Electives,12 credits,,,,"Requires permission of instructor"
+pool,MUED.1620,Introduction to Percussion Pedagogy,3,pool_2,Music Electives,12 credits,,,,"Requires permission of instructor"
+pool,MUED.2410,Introduction to Strings Pedagogy,3,pool_2,Music Electives,12 credits,,,,"Requires permission of instructor"
+pool,MUED.2440,Introduction to Voice Pedagogy,3,pool_2,Music Electives,12 credits,,,,"Requires permission of instructor"
+pool,MUED.3010,Technology in Music Education,3,pool_2,Music Electives,12 credits,,,,"Requires permission of instructor"
+pool,MUED.4100,Global Music for the Classroom,3,pool_2,Music Electives,12 credits,,,,"Requires permission of instructor"
+pool,MUED.2000,Observation Lab 2,1,pool_2,Music Electives,12 credits,,,,"Paired with MUED.4100; requires permission of instructor"
+pool,MUHI.1610,Music in Western Civilization,3,pool_2,Music Electives,12 credits,,,,
+pool,MUHI.2610,Music History 1,3,pool_2,Music Electives,12 credits,,,,
+pool,MUHI.2620,Music History 2,3,pool_2,Music Electives,12 credits,,,,
+pool,MUHI.3010,American Music,3,pool_2,Music Electives,12 credits,,,,
+pool,MUHI.3110,American Musical Theatre,3,pool_2,Music Electives,12 credits,,,,
+pool,MUHI.3550,Jazz,3,pool_2,Music Electives,12 credits,,,,
+pool,MUHI.3860,History of Rock,3,pool_2,Music Electives,12 credits,,,,
+pool,MUHI.4560,Film Music,3,pool_2,Music Electives,12 credits,,,,
+pool,MUSR.3010,Music Technology and Society,3,pool_2,Music Electives,12 credits,,,,
+pool,MUSR.4010,Music of the Beatles,3,pool_2,Music Electives,12 credits,,,,

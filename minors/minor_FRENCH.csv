@@ -1,0 +1,6 @@
+slot_type,course_id,course_name,credits,pool_id,pool_label,pool_requirement,prereq,coreq,min_grade,notes
+required,WLFR.1010,French 1 and Culture,3,,,,,,,,Students who place out must substitute additional 3000/4000-level electives
+required,WLFR.1020,French 2 and Culture,3,,,,WLFR.1010,,,,
+required,WLFR.2110,French 3 and Culture,3,,,,WLFR.1020,,,,
+required,WLFR.2120,French 4 and Culture,3,,,,WLFR.2110,,,,
+pool,,WLFR elective at 3000/4000 level (taught in French),3,pool_1,Upper-Level French Electives,2 courses,WLFR.2110 or WLFR.2120 or equivalent,,,,18-24 credits total; World Ready WLFR courses do not count; e.g. WLFR.3010 and above

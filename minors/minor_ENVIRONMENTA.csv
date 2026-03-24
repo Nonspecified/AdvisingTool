@@ -1,0 +1,7 @@
+slot_type,course_id,course_name,credits,pool_id,pool_label,pool_requirement,prereq,coreq,min_grade,notes
+required,POLI.1750,Introduction to Environmental Politics,3,,,,,,,,
+pool,ATMO.1410,Weather and Climate,3,pool_1,Environment and Society Electives,15 credits,,,ATMO.1430L,,Anti-req: ENVI.2020
+pool,BIOL.3150,Principles of Ecology,3,pool_1,Environment and Society Electives,15 credits,"BIOL.2400, or BIOL.2450, or BIOL.2460, or ENVI.2050, or instructor permission",,,,
+pool,BIOL.3170,Principles of Ecology Laboratory,1,pool_1,Environment and Society Electives,15 credits,,,,,Credit estimated as lab; verify with department
+pool,BIOL.4160,Climate Change: Science Communication and Solutions,3,pool_1,Environment and Society Electives,15 credits,,,,,Credit estimated; verify with department
+pool,FAHS.4970,Directed Study in Environmental and Society,3,pool_1,Environment and Society Electives,15 credits,,,,,At least 2 courses must be 3000-level or above; additional electives from course-listing-environment-and-society.aspx

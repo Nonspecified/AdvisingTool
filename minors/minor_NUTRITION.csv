@@ -1,0 +1,17 @@
+slot_type,course_id,course_name,credits,pool_id,pool_label,pool_requirement,prereq,coreq,min_grade,notes
+required,HSCI.1010,Anatomy and Physiology I,3,,,,,,,May be replaced with BIOL.1110 + BIOL.1170L
+required,HSCI.1030,Anatomy and Physiology I Lab,1,,,,,,,May be replaced with BIOL.1110 + BIOL.1170L
+required,HSCI.1020,Anatomy and Physiology II,3,,,,,,,May be replaced with BIOL.1120 + BIOL.1180L
+required,HSCI.1040,Anatomy and Physiology II Lab,1,,,,,,,May be replaced with BIOL.1120 + BIOL.1180L
+required,NUTR.2060,Human Nutrition,3,,,,,,B-,Minimum grade B- required; departmental authorization required to declare minor
+pool,NUTR.3010,Food Science,3,pool_1,Nutrition Electives,4 courses,,,,Minimum 2.5 GPA required in minor courses
+pool,NUTR.3360,Life Cycle Nutrition,3,pool_1,Nutrition Electives,4 courses,,,,Minimum 2.5 GPA required in minor courses
+pool,NUTR.3450,Community Nutrition,3,pool_1,Nutrition Electives,4 courses,,,,Minimum 2.5 GPA required in minor courses
+pool,NUTR.3570,Sports Nutrition,3,pool_1,Nutrition Electives,4 courses,,,,Minimum 2.5 GPA required in minor courses
+pool,NUTR.3710,Nutrition and Metabolism,3,pool_1,Nutrition Electives,4 courses,,,,Minimum 2.5 GPA required in minor courses
+pool,NUTR.3720,Body Diversity and Health,3,pool_1,Nutrition Electives,4 courses,,,,Minimum 2.5 GPA required in minor courses
+pool,NUTR.4630,Vitamins and Minerals,3,pool_1,Nutrition Electives,4 courses,,,,Also listed as NUTR.5630
+pool,NUTR.4650,Lab Methods in Nutritional Assessment,3,pool_1,Nutrition Electives,4 courses,,,,Also listed as NUTR.5650
+pool,NUTR.4720,Nutrigenetics,3,pool_1,Nutrition Electives,4 courses,,,,Also listed as NUTR.5720
+pool,NUTR.4810,Medical Nutrition Therapy I,3,pool_1,Nutrition Electives,4 courses,,,,
+pool,NUTR.4820,Medical Nutrition Therapy II,3,pool_1,Nutrition Electives,4 courses,,,,

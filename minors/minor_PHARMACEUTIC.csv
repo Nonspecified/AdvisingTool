@@ -1,0 +1,12 @@
+slot_type,course_id,course_name,credits,pool_id,pool_label,pool_requirement,prereq,coreq,min_grade,notes
+required,PHRM.1010,Introduction to the Pharmaceutical Industry,3,,,,,,,
+required,PHRM.3200,Molecular Pharmacology,3,,,,,,,
+required,PHRM.4100,Basic Pharmaceutics,3,,,,,,,
+pool,BMSC.3310,Clinical Immunology,3,pool_1,3000-level Electives,1 course,,,,"Also offered as BIOL.4930 Immunology; minimum 2.5 GPA required in minor courses"
+pool,BMSC.3220,Clinical Molecular Biology,3,pool_1,3000-level Electives,1 course,,,,"Also offered as BIOL.4670 Molecular Biology; minimum 2.5 GPA required in minor courses"
+pool,BMSC.4120,Clinical Cell Biology,3,pool_2,4000-level or Above Electives,1 course,,,,"Also offered as BIOL.4420 Advanced Cell Biology; minimum 2.5 GPA required in minor courses"
+pool,BMSC.4350,Applied Biomedical Genetics,3,pool_2,4000-level or Above Electives,1 course,,,,"Also offered as BIOL.4380 Advanced Genetic Analysis; minimum 2.5 GPA required in minor courses"
+pool,NUTR.4720,Nutrigenetics,3,pool_2,4000-level or Above Electives,1 course,,,,Minimum 2.5 GPA required in minor courses
+pool,PHRM.6100,Principles of Pharmaceutical Sciences,3,pool_2,4000-level or Above Electives,1 course,,,,Minimum 2.5 GPA required in minor courses
+pool,PHRM.6410,Drug Delivery,3,pool_2,4000-level or Above Electives,1 course,,,,Minimum 2.5 GPA required in minor courses
+pool,PHRM.6501,Drug Discovery,3,pool_2,4000-level or Above Electives,1 course,,,,Minimum 2.5 GPA required in minor courses

@@ -1,0 +1,7 @@
+slot_type,course_id,course_name,credits,pool_id,pool_label,pool_requirement,prereq,coreq,min_grade,notes
+required,MKTG.2100,Professional Communications,3,,,,,,,
+required,ECON.2110,Statistics I,3,,,,,,,Or equivalent statistics course
+required,MKTG.2010,Marketing Principles,3,,,,,,,
+required,MKTG.3130,Sales and Customer Relations,3,,,,,,,
+required,MKTG.3150,New Product and Service Management,3,,,,,,,
+required,MKTG.4110,Marketing Analytics,3,,,,,,,

@@ -749,7 +749,16 @@ def _te_allowed(course_id_norm: str, major: str, rules_df) -> bool:
     return True
 
 
-def fill_pathway(transcript_csv: Path) -> Path:
+def _load_minor_index() -> dict:
+    """Return code → display_name mapping from minors/index.json."""
+    p = _resource_path("minors/index.json")
+    if p.exists():
+        with open(p, encoding="utf-8") as f:
+            return json.load(f)
+    return {}
+
+
+def fill_pathway(transcript_csv: Path, extra_minor_code: str = None) -> Path:
     """Map transcript courses to curriculum slots. Returns filled_pathway CSV path."""
     tx = pd.read_csv(transcript_csv, engine="python")
     if "course_id" not in tx.columns:
@@ -976,7 +985,7 @@ def fill_pathway(transcript_csv: Path) -> Path:
     minor_info = _infer_minor(tx)
     if minor_info:
         minor_code, minor_display_name = minor_info
-        minor_csv = _resource_path(f"minor_{minor_code}.csv")
+        minor_csv = _resource_path(f"minors/minor_{minor_code}.csv")
         if minor_csv.exists():
             minor_rows = _process_minor(minor_csv, tx, ever_met_min,
                                         minor_code, minor_display_name, track)
@@ -992,6 +1001,17 @@ def fill_pathway(transcript_csv: Path) -> Path:
                 "viz_status": "grey", "source_track": track,
             })
             combined = pd.concat([combined, pd.DataFrame([placeholder])], ignore_index=True)
+
+    # ── extra (undeclared) minor added by user ────────────────────────────────
+    if extra_minor_code:
+        _idx = _load_minor_index()
+        _dname = _idx.get(extra_minor_code, extra_minor_code.title())
+        _mcsv = _resource_path(f"minors/minor_{extra_minor_code}.csv")
+        if _mcsv.exists():
+            _mrows = _process_minor(_mcsv, tx, ever_met_min,
+                                    extra_minor_code, _dname, track)
+            if _mrows:
+                combined = pd.concat([combined, pd.DataFrame(_mrows)], ignore_index=True)
 
     # ── propagate student identity into every row ──────────────────────────────
     _sname = ""
@@ -1364,6 +1384,16 @@ def build_html(df: pd.DataFrame) -> str:
             f'</div>'
         )
 
+    # ── "Add Minor Pathway" button (shown only when no minor declared) ────────
+    add_minor_html = ""
+    if not minors:
+        add_minor_html = (
+            '<div id="minor-pathway-bar">'
+            '<a href="/select-minor?session=__MINOR_SESSION_ID__" id="add-minor-btn">'
+            '+ Add Minor Pathway</a>'
+            '</div>'
+        )
+
     # ── unmapped ──────────────────────────────────────────────────────────────
     unmapped_html = ""
     if unmapped:
@@ -1436,6 +1466,9 @@ body{{font-family:"Segoe UI",Arial,sans-serif;background:#1a1a2e;color:#e0e0e0;m
 .elective-header{{font-size:.75rem;font-weight:700;color:#a0c4ff;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;padding-bottom:3px;border-bottom:1px solid #0f3460}}
 .elective-boxes{{display:flex;flex-wrap:wrap;gap:5px}}
 .elective-boxes .course-box{{flex:0 0 auto;min-width:88px;max-width:145px}}
+#minor-pathway-bar{{margin-top:10px;text-align:right}}
+#add-minor-btn{{display:inline-block;background:#0f3460;color:#a0c4ff;border:1px solid #1565c0;border-radius:6px;padding:7px 16px;font-size:.82rem;text-decoration:none;font-family:"Segoe UI",Arial,sans-serif}}
+#add-minor-btn:hover{{background:#1565c0;color:#fff}}
 .minor-section{{margin-top:10px;background:#16213e;border:1px solid #0f3460;border-radius:8px;padding:10px}}
 .minor-title{{font-size:.85rem;font-weight:700;color:#c9d1d9;margin-bottom:8px;padding-bottom:4px;border-bottom:1px solid #0f3460}}
 .minor-body{{display:flex;gap:14px;flex-wrap:wrap;align-items:flex-start}}
@@ -1544,6 +1577,7 @@ td[data-slot-cid]{{cursor:pointer}}
 {grid_html}
 </div>
 {elects_html}
+{add_minor_html}
 {minors_html}
 {unmapped_html}
 {table_html}

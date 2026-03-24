@@ -1,0 +1,7 @@
+slot_type,course_id,course_name,credits,pool_id,pool_label,pool_requirement,prereq,coreq,min_grade,notes
+required,WLPO.1130,Portuguese 1 and Culture,3,,,,,,,
+required,WLPO.1140,Portuguese 2 and Culture,3,,,,,WLPO.1130,,,
+required,WLPO.2130,Portuguese 3 and Culture,3,,,,,WLPO.1140,,,
+required,WLPO.2140,Portuguese 4 and Culture,3,,,,,WLPO.2130,,,
+pool,,Portuguese Studies Elective,3,pool_1,Portuguese Studies Electives,6 credits,,,,Students who place out of language courses must take additional electives
+pool,,Portuguese Studies Elective,3,pool_1,Portuguese Studies Electives,6 credits,,,,

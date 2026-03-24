@@ -1,0 +1,8 @@
+slot_type,course_id,course_name,credits,pool_id,pool_label,pool_requirement,prereq,coreq,min_grade,notes
+required,UTCH.1030,Exploring Teaching and Learning in STEM,3,,,,,,,Required before declaring minor
+required,UTCH.2010,Knowing & Learning in Math & Science,3,,,,,,,Satisfies Core Curriculum Social Sciences Perspective (SS)
+required,UTCH.2020,Interactions and Equity,3,,,,,,,
+required,UTCH.2040,Perspectives on Mathematics & Science,3,,,,,,,Satisfies Core Curriculum Arts & Humanities Perspective (AH)
+required,UTCH.3010,Project-Based Instruction,3,,,,,,,
+required,UTCH.3020,Research Methods,3,,,,,,,
+required,UTCH.4410,Teaching Emergent Bilingual Students,3,,,,,,,

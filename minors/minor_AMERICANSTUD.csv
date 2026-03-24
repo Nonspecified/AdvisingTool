@@ -1,0 +1,3 @@
+slot_type,course_id,course_name,credits,pool_id,pool_label,pool_requirement,prereq,coreq,min_grade,notes
+required,AMST 2480,Values in American Culture,3,,,,,,,,
+pool,,Elective courses from American Studies course listing,3,pool_electives,Choose from American Studies course listing (min 6 credits at 3000+),15 credits,,,,See American Studies course listing for approved courses

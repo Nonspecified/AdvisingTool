@@ -1,0 +1,8 @@
+slot_type,course_id,course_name,credits,pool_id,pool_label,pool_requirement,prereq,coreq,min_grade,notes
+required,COMP.1010,Computing I,3,,,,,,C,
+required,COMP.1030L,Computing I Lab,1,,,,,,C,
+required,COMP.1020,Computing II,3,,,,,,,C,COMP.1010
+required,COMP.1040L,Computing II Lab,1,,,,,,C,
+required,COMP.2010,Computing III,3,,,,,,,C,COMP.1020
+required,COMP.2010R,Computing III Lab,1,,,,,,C,
+pool,,CS Elective (3000/4000 level preferred),3,pool_1,CS Electives,3 courses,,,C,At least 2 of 3 electives must be 3000- or 4000-level; must be acceptable as required or elective CS courses for CS majors; consult undergraduate coordinator

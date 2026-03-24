@@ -1,0 +1,10 @@
+slot_type,course_id,course_name,credits,pool_id,pool_label,pool_requirement,prereq,coreq,min_grade,notes
+required,ENTR.3000,Principles of Innovation and Entrepreneurship,3,,,,Sophomore level or higher,,,,Minimum 2.700 GPA across all minor courses
+required,ENTR.3610,Starting a New Venture,3,,,,Junior level or higher or permission of instructor,,,,Minimum 2.700 GPA across all minor courses
+pool,ENTR.3620,Corporate Entrepreneurship,3,pool_1,Entrepreneurship Electives,4 courses,ENTR.3000,,,,Minimum 2.700 GPA across all minor courses
+pool,ENTR.4630,Managing Innovation,3,pool_1,Entrepreneurship Electives,4 courses,Junior level or higher or permission of instructor,,,,Minimum 2.700 GPA across all minor courses
+pool,ENTR.4640,Finance for Emerging Business Enterprises,3,pool_1,Entrepreneurship Electives,4 courses,Junior level or higher or permission of instructor,,,,Minimum 2.700 GPA across all minor courses
+pool,ENTR.4100,Global Entrepreneurship and Innovation I,3,pool_1,Entrepreneurship Electives,4 courses,,,,,Minimum 2.700 GPA across all minor courses
+pool,ENTR.4110,Global Entrepreneurship and Innovation II,3,pool_1,Entrepreneurship Electives,4 courses,,,,,Minimum 2.700 GPA across all minor courses
+pool,ENTR.4150,Entrepreneurial Customer Discovery,3,pool_1,Entrepreneurship Electives,4 courses,Junior standing or above,,,,Minimum 2.700 GPA across all minor courses
+pool,ENTR.4960,Entrepreneurial Strategy Implementation,3,pool_1,Entrepreneurship Electives,4 courses,"FINA.3010, MKTG.2010, POMS.3010, MGMT.3010, and Senior Level",,,,Capstone; minimum 2.700 GPA across all minor courses

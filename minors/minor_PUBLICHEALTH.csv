@@ -1,0 +1,19 @@
+slot_type,course_id,course_name,credits,pool_id,pool_label,pool_requirement,prereq,coreq,min_grade,notes
+pool,HSCI.1010,Human Anatomy & Physiology I,3,pool_1,Biology Foundation,1 course,,,,Or BIOL.1110; 4 credits total with lab
+pool,HSCI.1030,Human Anatomy & Physiology I Lab,1,pool_1,Biology Foundation,1 course,,,HSCI.1010,, Co-req lab; or BIOL.1170L
+pool,BIOL.1110,Principles of Biology I,3,pool_1,Biology Foundation,1 course,,,,Or HSCI.1010
+pool,BIOL.1170L,Principles of Biology I Laboratory,1,pool_1,Biology Foundation,1 course,,,BIOL.1110,,Co-req lab; or HSCI.1030
+required,PUBH.1021,Introduction to Public Health,3,,,,,,,
+required,PUBH.2050,Social Determinants of Health,3,,,,,PUBH.1021,,,
+required,PUBH.3050,Introduction to Epidemiology,3,,,,,PUBH.1021,,,
+pool,HSCI.3080,Global Health,3,pool_2,Public Health Electives,9 credits,,,,Choose 9 credits; at least one must be 3000-4000 level
+pool,PUBH.2031,Introduction to Public Health Informatics and Information Systems,3,pool_2,Public Health Electives,9 credits,PUBH.1021,,,
+pool,PUBH.2040,Introduction to Health Promotion,3,pool_2,Public Health Electives,9 credits,PUBH.1021,,,
+pool,PUBH.2070,The US Healthcare System,3,pool_2,Public Health Electives,9 credits,PUBH.1021,,,
+pool,PUBH.2080,Principles of Environmental Health Science,3,pool_2,Public Health Electives,9 credits,PUBH.1021,,,
+pool,PUBH.3010,Introduction to Biostatistics,3,pool_2,Public Health Electives,9 credits,PUBH.1021,,,
+pool,PUBH.3011,Program Planning in Health Promotion,3,pool_2,Public Health Electives,9 credits,PUBH.1021,,,
+pool,PUBH.3020,Health Communication,3,pool_2,Public Health Electives,9 credits,PUBH.1021,,,
+pool,PUBH.3070,Introduction to Public Health Policy,3,pool_2,Public Health Electives,9 credits,PUBH.1021,,,
+pool,PUBH.3100,Infectious Disease,3,pool_2,Public Health Electives,9 credits,PUBH.1021,,,
+pool,PUBH.4130,Public Health Administration,3,pool_2,Public Health Electives,9 credits,PUBH.1021,,,

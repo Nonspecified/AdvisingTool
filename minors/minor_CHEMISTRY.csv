@@ -1,0 +1,6 @@
+slot_type,course_id,course_name,credits,pool_id,pool_label,pool_requirement,prereq,coreq,min_grade,notes
+required,CHEM.1210,Chemistry I,3,,,,,CHEM.1230L,,,
+required,CHEM.1230L,Chemistry I Laboratory,1,,,,,,,,
+required,CHEM.1220,Chemistry II,3,,,,,CHEM.1240L,,CHEM.1210
+required,CHEM.1240L,Chemistry II Laboratory,1,,,,,,,,CHEM.1220
+pool,,Additional CHEM courses (3000+ level),3,pool_1,Upper-Level Chemistry Electives,4 courses,,,,, At least 8 semester hours at 3000+ level; no more than 2 from same area; at least 2 must carry lab component; contact department for course list

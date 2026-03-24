@@ -1,0 +1,9 @@
+slot_type,course_id,course_name,credits,pool_id,pool_label,pool_requirement,prereq,coreq,min_grade,notes
+required,WLSP.2110,Spanish 3 and Culture,3,,,,,,,
+required,WLSP.2120,Spanish 4 and Culture,3,,,,,,,
+required,WLSP.3130,Fieldwork in the Spanish Community,3,,,,,,,
+required,,Spanish Elective (3000/4000 level),3,,,,,,,
+required,,Spanish Elective (3000/4000 level),3,,,,,,,Students who place out of Spanish 3-4 may substitute additional upper-level courses
+pool,WLSP.1140,Spanish for Business,3,pool_1,Professions Elective,1 course,,,,
+pool,WLSP.1030,Medical Spanish,3,pool_1,Professions Elective,1 course,,,,
+pool,WLSP.2540,Topics in Conversational Spanish,3,pool_1,Professions Elective,1 course,,,,

@@ -1,0 +1,12 @@
+slot_type,course_id,course_name,credits,pool_id,pool_label,pool_requirement,prereq,coreq,min_grade,notes
+pool,,Legal Studies Approved Course,3,pool_1,Legal Studies Coursework,18 credits,,,,,Choose from approved course list; see advisor. At least 6 credits at 3000-level or above. Up to 2 courses may come from the Political Science pool below.
+pool,,Legal Studies Approved Course,3,pool_1,Legal Studies Coursework,18 credits,,,,,Choose from approved course list; see advisor. At least 6 credits at 3000-level or above. Up to 2 courses may come from the Political Science pool below.
+pool,,Legal Studies Approved Course,3,pool_1,Legal Studies Coursework,18 credits,,,,,Choose from approved course list; see advisor. At least 6 credits at 3000-level or above. Up to 2 courses may come from the Political Science pool below.
+pool,,Legal Studies Approved Course,3,pool_1,Legal Studies Coursework,18 credits,,,,,Choose from approved course list; see advisor. At least 6 credits at 3000-level or above. Up to 2 courses may come from the Political Science pool below.
+pool,,Legal Studies Approved Course,3,pool_1,Legal Studies Coursework,18 credits,,,,,Choose from approved course list; see advisor. At least 6 credits at 3000-level or above. Up to 2 courses may come from the Political Science pool below.
+pool,,Legal Studies Approved Course,3,pool_1,Legal Studies Coursework,18 credits,,,,,Choose from approved course list; see advisor. At least 6 credits at 3000-level or above. Up to 2 courses may come from the Political Science pool below.
+pool,POLI.2300,Law and the Legal System,3,pool_2,Political Science Options (max 2),2 courses,,,,,Up to 2 of the 6 required courses may come from this pool
+pool,POLI.3110,Foundations of Law,3,pool_2,Political Science Options (max 2),2 courses,,,,,Up to 2 of the 6 required courses may come from this pool
+pool,POLI.3350,Constitutional Law: Powers and Principles,3,pool_2,Political Science Options (max 2),2 courses,,,,,Up to 2 of the 6 required courses may come from this pool
+pool,POLI.3370,Constitutional Law: Rights and Liberties,3,pool_2,Political Science Options (max 2),2 courses,,,,,Up to 2 of the 6 required courses may come from this pool
+pool,POLI.3390,Supreme Court Seminar,3,pool_2,Political Science Options (max 2),2 courses,,,,,Up to 2 of the 6 required courses may come from this pool
