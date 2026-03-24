@@ -1538,10 +1538,10 @@ def build_html(df: pd.DataFrame) -> str:
 <style>
 *{{box-sizing:border-box;margin:0;padding:0}}
 body{{font-family:"Segoe UI",Arial,sans-serif;background:#1a1a2e;color:#e0e0e0;min-height:100vh;padding:16px}}
-#page-header{{text-align:center;padding:14px 20px;background:#16213e;border:1px solid #0f3460;border-radius:8px;margin-bottom:14px}}
+#page-header{{display:flex;flex-direction:column;align-items:center;text-align:center;padding:14px 20px;background:#16213e;border:1px solid #0f3460;border-radius:8px;margin-bottom:14px}}
 #page-header h1{{font-size:1.35rem;color:#e0e0e0}}
 #page-header .student-name{{font-size:1.1rem;font-weight:700;color:#ffffff;margin-top:6px}}
-#page-header .meta{{font-size:.88rem;color:#8090b0;margin-top:3px;text-align:center}}
+#page-header .meta{{font-size:.88rem;color:#8090b0;margin-top:3px}}
 .stats-bar{{display:flex;gap:10px;align-items:center;justify-content:center;margin-top:8px;flex-wrap:wrap}}
 .stat{{display:flex;flex-direction:column;align-items:center;background:#0f3460;border-radius:6px;padding:4px 12px}}
 .stat-label{{font-size:.65rem;color:#8090b0;text-transform:uppercase;letter-spacing:.05em}}
