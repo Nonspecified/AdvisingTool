@@ -70,6 +70,8 @@ def norm_id(s: str) -> str:
     """Normalize a course ID to uppercase, single-spaced, no dots."""
     t = str(s or "").upper().replace(".", " ").strip()
     t = re.sub(r"\s+", " ", t)
+    # Collapse "CHEM 1230 L" → "CHEM 1230L" (PDF sometimes splits suffix with space)
+    t = re.sub(r"(\d{3,4})\s+([A-Z])$", r"\1\2", t)
     t = re.sub(r"^([A-Z&]+)\s*([0-9][0-9A-Z]*)$", r"\1 \2", t)
     return t
 
@@ -120,7 +122,7 @@ PROGRAM_RE     = re.compile(r"^\s*Program:\s*(?P<program>.+?)\s*$", re.I)
 PLAN_RE        = re.compile(r"^\s*Plan:\s*(?P<plan>.+?)\s*$", re.I)
 
 TRANSCRIPT_COURSE_RE = re.compile(
-    r"^(?P<course_id>[A-Z]{2,5}\s+\d{4}[A-Z]?)\s+"
+    r"^(?P<course_id>[A-Z]{2,5}\s+\d{4}\s*[A-Z]?)\s+"
     r"(?P<course_name>.+?)\s+"
     r"(?P<attempted>\d+\.\d{2})\s+"
     r"(?P<earned>\d+\.\d{2})"
@@ -128,13 +130,13 @@ TRANSCRIPT_COURSE_RE = re.compile(
     r"\s+(?P<points>\d+\.\d{3})\s*$"
 )
 COURSE_TRANSFER_RE = re.compile(
-    r"^(?P<course_id>[A-Z]{2,5}\s+\d{4}[A-Z]?)\s+"
+    r"^(?P<course_id>[A-Z]{2,5}\s+\d{4}\s*[A-Z]?)\s+"
     r"(?P<course_name>.+?)\s+"
     r"(?P<attempted>\d+\.\d{2})\s+"
     r"(?P<grade>(?:T|A|B|C|D|F|P|S|U)(?:[+-])?)\s*$"
 )
 INCOMING_TRANSFER_ROW_RE = re.compile(
-    r"^(?P<course_id>[A-Z]{2,5}\s+\d{4}[A-Z]?)\s+"
+    r"^(?P<course_id>[A-Z]{2,5}\s+\d{4}\s*[A-Z]?)\s+"
     r"(?P<course_name>.+?)\s+"
     r"(?P<attempted>\d+\.\d{2})\s+"
     r"(?P<grade>(?:T|A|B|C|D|F|P|S|U)(?:[+-])?)"
