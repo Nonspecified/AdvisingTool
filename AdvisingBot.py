@@ -293,6 +293,15 @@ def _parse_courses(lines: list) -> list:
         if mplan:
             current_plan = mplan.group("plan").strip()
             continue
+        # PyPDF2 sometimes concatenates a course row with the next column/page
+        # header (e.g. "CHEM 1230L ... 3.000Course Description Attempted…").
+        # Strip any SKIP_LINE_HINT that appears after real content so the
+        # course data at the front of the line is still parsed.
+        for _h in SKIP_LINE_HINTS:
+            _pos = ln.find(_h)
+            if _pos > 0:          # hint is a suffix/middle, not the whole line
+                ln = ln[:_pos].rstrip()
+                break
         if any(h in ln for h in SKIP_LINE_HINTS):
             continue
 
