@@ -63,6 +63,12 @@ TERM_ORDER_HTML  = ["Y1F", "Y1S", "Y2F", "Y2S", "Y3F", "Y3S", "Y4F", "Y4S"]
 SEM_LABELS       = {"F": "Fall", "S": "Spring"}
 ELECTIVE_BUCKETS = {"GENED_AH", "GENED_SS", "TechElective"}
 
+# Course equivalencies: modern label should be used in curriculum display,
+# but any course in the group can satisfy requirements/prereqs.
+COURSE_EQUIV_GROUPS = [
+    {"MECH 3220", "MECH 3230"},
+]
+
 
 # ── shared utility functions ──────────────────────────────────────────────────
 
@@ -111,6 +117,23 @@ def extract_course_ids(text: str) -> list:
 
 def css_id(course_id: str) -> str:
     return "c-" + re.sub(r"[^A-Za-z0-9]", "-", str(course_id)).strip("-")
+
+
+def equiv_ids(course_id_norm: str) -> set[str]:
+    cid = norm_id(course_id_norm)
+    if not cid:
+        return set()
+    for grp in COURSE_EQUIV_GROUPS:
+        if cid in grp:
+            return set(grp)
+    return {cid}
+
+
+def expand_equiv_ids(course_ids) -> set[str]:
+    expanded = set()
+    for cid in (course_ids or []):
+        expanded |= equiv_ids(cid)
+    return expanded
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -826,6 +849,18 @@ def fill_pathway(transcript_csv: Path, extra_minor_codes: list = None, track_ove
         if c not in cur.columns:
             cur[c] = ""
     cur["course_id_norm"] = cur["course_id"].map(norm_id)
+    cur["course_name_str"] = cur["course_name"].astype(str).str.strip()
+    cur["is_alt_row"] = cur["course_name_str"].str.contains(r"\bALT\b", case=False, regex=True)
+    cur["alt_base_name"] = cur["course_name_str"].str.replace(r"\s+ALT\b", "", case=False, regex=True).str.upper().str.strip()
+
+    # Build equivalency groups for rows labeled as ALT so alt courses satisfy the primary slot.
+    alt_equiv = {}
+    for _, grp in cur.groupby(["term_id", "alt_base_name"]):
+        ids = set(grp["course_id_norm"].dropna().astype(str).str.strip())
+        ids = {cid for cid in ids if cid and cid.lower() not in {"nan", "none"}}
+        if len(ids) > 1:
+            for cid in ids:
+                alt_equiv[cid] = ids
 
     best_map = _best_attempts(tx)
 
@@ -840,6 +875,9 @@ def fill_pathway(transcript_csv: Path, extra_minor_codes: list = None, track_ove
 
     out_rows = []
     for _, row in cur.iterrows():
+        if bool(row.get("is_alt_row", False)):
+            # ALT entries are alternatives to the primary slot, not extra required slots.
+            continue
         cidn   = row["course_id_norm"]
         bucket = str(row.get("bucket", "")).strip()
         filled = {
@@ -855,13 +893,14 @@ def fill_pathway(transcript_csv: Path, extra_minor_codes: list = None, track_ove
             "source_track": track,
         }
         if bucket not in {"GENED_AH", "GENED_SS", "TechElective"}:
-            att = tx[tx["course_id_norm"] == cidn].copy()
+            candidate_ids = expand_equiv_ids(alt_equiv.get(cidn, {cidn}))
+            att = tx[tx["course_id_norm"].isin(candidate_ids)].copy()
             if att.empty and not re.search(r"[A-Z]$", cidn):
                 # Fallback: match transcript IDs that have a letter suffix but otherwise
                 # equal this slot (e.g., "ENGL 1010S" matches curriculum slot "ENGL 1010").
                 # Only applies when the slot itself has no letter suffix (avoiding labs like PHYS 1410L).
                 base_norm = tx["course_id_norm"].str.replace(r"(?<=[0-9]{4})[A-Z]+$", "", regex=True)
-                att = tx[base_norm == cidn].copy()
+                att = tx[base_norm.isin({re.sub(r"(?<=[0-9]{4})[A-Z]+$", "", x) for x in candidate_ids})].copy()
             if not att.empty:
                 meets  = att[att["grade_tok"].map(lambda g: grade_meets_min(g, row.get("min_grade", "")))]
                 chosen = _latest_by_term(meets) if not meets.empty else _latest_by_term(att)
@@ -985,9 +1024,9 @@ def fill_pathway(transcript_csv: Path, extra_minor_codes: list = None, track_ove
         if not cidn:
             continue
         if grade_meets_min(r.get("grade_tok", ""), min_by_course.get(cidn, "")):
-            ever_met_min.add(cidn)
-    ever_met_min |= set(tx.loc[tx["attempt_status"].isin(["passed", "transfer"]),
-                                "course_id_norm"])
+            ever_met_min |= equiv_ids(cidn)
+    for cid in tx.loc[tx["attempt_status"].isin(["passed", "transfer"]), "course_id_norm"]:
+        ever_met_min |= equiv_ids(cid)
 
     def _prereq_check(row) -> str:
         pre = str(row.get("prereq", "")).upper().strip()
@@ -996,7 +1035,10 @@ def fill_pathway(transcript_csv: Path, extra_minor_codes: list = None, track_ove
         found = re.findall(r"[A-Z]{2,}\.? ?\d{3,4}", pre)
         if not found:
             return "Y"
-        return "Y" if all(norm_id(c) in ever_met_min for c in found) else "N"
+        for c in found:
+            if not (equiv_ids(c) & ever_met_min):
+                return "N"
+        return "Y"
 
     combined["prereqs_met_flag"] = combined.apply(_prereq_check, axis=1)
 
@@ -1180,11 +1222,33 @@ def build_cpr_table(df: pd.DataFrame) -> str:
         except Exception:
             return str(v)
 
+    def _clean_str(v) -> str:
+        s = "" if v is None else str(v).strip()
+        return "" if s.lower() in {"", "nan", "none", "nat"} else s
+
+    def _clean_cid(v) -> str:
+        s = _clean_str(v)
+        return norm_id(s) if s else ""
+
     def make_cells(row):
         if row is None:
             return '<td></td><td></td><td class="cr"></td><td class="t-grade"></td><td class="term-col"></td>'
-        cid        = norm_id(row.get("slot_course_id", ""))
-        cname      = str(row.get("slot_course_name", "")).strip()
+        bucket     = str(row.get("bucket", "")).strip()
+        slot_cid   = _clean_cid(row.get("slot_course_id", ""))
+        slot_cname = _clean_str(row.get("slot_course_name", ""))
+        match_cid  = _clean_cid(row.get("match_course_id", ""))
+        match_cname = _clean_str(row.get("match_course_name", ""))
+        if bucket in ELECTIVE_BUCKETS and match_cid:
+            cid = match_cid
+            cname = match_cname or slot_cname
+        else:
+            cid = slot_cid
+            cname = slot_cname
+        if bucket == "TechElective" and not match_cid:
+            cname = "Tech Elective"
+        counts_as = ""
+        if bucket in ELECTIVE_BUCKETS and match_cid and slot_cid and slot_cid != match_cid:
+            counts_as = f' <span class="counts-as-inline">(counts as {slot_cid})</span>'
         creds      = _fmt_cr(row.get("credits", ""))
         grade      = str(row.get("match_grade", "")).strip()
         term_taken = str(row.get("match_term_code", "")).strip()
@@ -1207,7 +1271,7 @@ def build_cpr_table(df: pd.DataFrame) -> str:
 
         return (
             f'<td class="t-cid {cid_cls} {sc}" data-slot-cid="{cid}">{cid}</td>'
-            f'<td class="t-name {sc}">{cname}{badge}</td>'
+            f'<td class="t-name {sc}">{cname}{counts_as}{badge}</td>'
             f'<td class="cr {sc}">{creds}</td>'
             f'<td class="t-grade {sc}">{grade_disp}</td>'
             f'<td class="term-col {sc}">{term_taken}</td>'
@@ -1296,6 +1360,7 @@ def build_html(df: pd.DataFrame) -> str:
     student_name = first_nonempty(find_col("student_name") or find_col("full_name")) or "Student"
     major        = first_nonempty(find_col("source_track") or find_col("plan_short") or
                                    find_col("plan")) or "—"
+    student_id   = first_nonempty(find_col("student_id")) or ""
     ssy_col = find_col("student_start_year")
     if ssy_col:
         _syv = df[ssy_col].dropna().astype(str).str.strip()
@@ -1366,16 +1431,40 @@ def build_html(df: pd.DataFrame) -> str:
 
     # ── course box renderer ───────────────────────────────────────────────────
     def course_box(row: dict) -> str:
-        cid   = norm_id(row.get("slot_course_id", ""))
-        cname = str(row.get("slot_course_name", "")).strip() or "(Unnamed)"
+        def _clean_str(v) -> str:
+            s = "" if v is None else str(v).strip()
+            return "" if s.lower() in {"", "nan", "none", "nat"} else s
+
+        def _clean_cid(v) -> str:
+            s = _clean_str(v)
+            return norm_id(s) if s else ""
+
+        bucket = str(row.get("bucket", "")).strip()
+        slot_cid = _clean_cid(row.get("slot_course_id", ""))
+        slot_cname = _clean_str(row.get("slot_course_name", ""))
+        match_cid = _clean_cid(row.get("match_course_id", ""))
+        match_cname = _clean_str(row.get("match_course_name", ""))
+        if bucket in ELECTIVE_BUCKETS and match_cid:
+            cid = match_cid
+            cname = match_cname or slot_cname or "(Unnamed)"
+        else:
+            cid = slot_cid
+            cname = slot_cname or "(Unnamed)"
+        if bucket == "TechElective" and not match_cid:
+            cname = "Tech Elective"
         creds = str(row.get("credits", "")).strip()
         grade = str(row.get("match_grade", "")).strip()
         prereq_ids = json.dumps(extract_course_ids(str(row.get("prereq", ""))))
         coreq_ids  = json.dumps(extract_course_ids(str(row.get("coreq",  ""))))
         status  = _html_box_status(row)
         elem_id = css_id(cid) if cid else "c-" + re.sub(r"\W+", "-", cname)[:20]
+        recommendable = status in {"eligible", "nextelig", "belowmin"}
         grade_h = f'<span class="grade">{grade}</span>' if grade not in ("", "nan") else ""
         creds_h = f'<span class="credits">{creds} cr</span>' if creds not in ("", "nan") else ""
+        counts_as_h = ""
+        if bucket in ELECTIVE_BUCKETS and match_cid and slot_cid and slot_cid != match_cid:
+            counts_as_h = f'<span class="counts-as-note">Counts as: {slot_cid}</span>'
+        rec_btn_h = '<button class="rec-btn" title="Mark as recommended next semester">+ Next</button>' if recommendable else ""
         _pf = row.get("prior_fail_count", 0)
         n_dots = min(int(_pf if (_pf == _pf and _pf) else 0), 4)
         if n_dots > 0:
@@ -1394,10 +1483,12 @@ def build_html(df: pd.DataFrame) -> str:
         return (
             f'<div class="course-box {status}" id="{elem_id}" '
             f'data-cid="{cid}" data-prereqs=\'{prereq_ids}\' data-coreqs=\'{coreq_ids}\' '
+            f'data-term-id="{row.get("term_id", "")}" data-term-label="{str(row.get("term_label", "")).strip()}" '
             f'data-orig-status="{status}" data-orig-cid="{cid}" data-orig-cname="{cname}">'
             f'<div class="cid">{cid}</div>'
             f'<div class="cname">{cname}</div>'
-            f'<div class="meta">{creds_h}{grade_h}</div>'
+            f'<div class="meta">{creds_h}{grade_h}{counts_as_h}</div>'
+            f'{rec_btn_h}'
             f'{dots_h}'
             f'</div>'
         )
@@ -1617,6 +1708,7 @@ body{{font-family:"Segoe UI",Arial,sans-serif;background:#1a1a2e;color:#e0e0e0;m
 .cid{{font-size:.68rem;font-weight:700;letter-spacing:.02em}}
 .cname{{font-size:.62rem;line-height:1.3;margin-top:2px}}
 .meta{{font-size:.60rem;margin-top:3px;display:flex;gap:6px;opacity:.8}}
+.counts-as-note{{font-size:.56rem;opacity:.95;color:#c9d1d9}}
 .grade{{font-weight:700}}
 #electives{{margin-top:10px;background:#16213e;border:1px solid #0f3460;border-radius:8px;padding:10px}}
 .elects-inner{{display:flex;gap:14px;flex-wrap:wrap}}
@@ -1663,6 +1755,12 @@ body{{font-family:"Segoe UI",Arial,sans-serif;background:#1a1a2e;color:#e0e0e0;m
   .attempt-dot{{background:#cc2222}}
   #electives{{background:#fff;border-color:#ccc}}
   #cpr-table-section{{margin-top:12px}}
+    #cpr-table-section{{break-inside:auto;page-break-inside:auto}}
+    .cpr-table{{break-inside:auto;page-break-inside:auto}}
+    .cpr-table thead{{display:table-header-group}}
+    .cpr-table tfoot{{display:table-footer-group}}
+    .cpr-table tr{{break-inside:avoid;page-break-inside:avoid;page-break-after:auto}}
+    .year-label-row,.sem-hdr-row{{break-inside:avoid;page-break-inside:avoid}}
   .cell-completed,.cell-completed td{{background-color:#eaf7ee!important}}
   .cell-inprog,.cell-inprog td{{background-color:#e8f0fd!important}}
   .cell-eligible,.cell-eligible td{{background-color:#fffde7!important}}
@@ -1701,6 +1799,7 @@ body{{font-family:"Segoe UI",Arial,sans-serif;background:#1a1a2e;color:#e0e0e0;m
 .cell-eligible td,.cell-eligible{{color:#5a4500;background-color:#fffbe0!important}}
 .cell-locked td,.cell-locked{{color:#aaa}}
 .badge{{display:inline-block;font-size:.58rem;font-weight:700;padding:1px 5px;border-radius:3px;vertical-align:middle;margin-left:4px;white-space:nowrap}}
+.counts-as-inline{{font-size:.58rem;color:#6d5a00;font-style:italic;white-space:nowrap}}
 .badge-next{{background:#fffbe0;color:#5a4500;border:1px solid #b89000}}
 .badge-inprog{{background:#cce5ff;color:#004085;border:1px solid #004085}}
 .badge-belowmin{{background:#ffe0b2;color:#7a2c00;border:1px solid #e65100}}
@@ -1711,6 +1810,9 @@ body{{font-family:"Segoe UI",Arial,sans-serif;background:#1a1a2e;color:#e0e0e0;m
 .ovr-btn{{position:absolute;bottom:3px;right:3px;background:rgba(30,100,30,.75);color:#a8f0a8;border:1px solid #2d6a4f;border-radius:3px;font-size:.52rem;padding:1px 4px;cursor:pointer;display:none;z-index:10;line-height:1.4;white-space:nowrap}}
 .course-box.eligible:hover .ovr-btn,.course-box.locked:hover .ovr-btn,.course-box.nextelig:hover .ovr-btn{{display:block}}
 .ovr-btn:hover{{background:rgba(30,130,30,.9)}}
+.rec-btn{{position:absolute;top:3px;right:3px;background:rgba(18,44,86,.92);color:#a0caff;border:1px solid #2a5ab0;border-radius:3px;font-size:.52rem;padding:1px 5px;cursor:pointer;line-height:1.35;display:none;z-index:11;white-space:nowrap}}
+.course-box.eligible:hover .rec-btn,.course-box.nextelig:hover .rec-btn,.course-box.belowmin:hover .rec-btn{{display:block}}
+.course-box.is-recommended .rec-btn{{display:block;background:rgba(24,92,42,.95);border-color:#2d6a4f;color:#c8f7d2}}
 td[data-slot-cid]{{cursor:pointer}}
 /* ── override drag-drop ── */
 #unmapped{{margin-top:8px;font-size:.75rem;color:#666;background:#16213e;border:1px solid #0f3460;border-radius:6px;padding:8px 12px}}
@@ -1722,11 +1824,47 @@ td[data-slot-cid]{{cursor:pointer}}
 .course-box.override{{border-top:2px solid #d4aa00!important;border-left:2px solid #d4aa00!important;border-right:2px solid #cc2222!important;border-bottom:2px solid #cc2222!important;background:#1f1a0a!important;color:#ffe8c0!important;opacity:1!important}}
 .course-box.drag-over{{outline:2px dashed #fff;outline-offset:2px}}
 .cell-override{{background:#fff8e1!important;color:#7a5c00!important}}
+#advisor-panel{{margin-top:12px;background:#16213e;border:1px solid #0f3460;border-radius:8px;padding:12px}}
+#advisor-panel h3{{font-size:.9rem;color:#a0c4ff;margin-bottom:8px}}
+#recommended-courses-list{{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}}
+.rec-chip{{display:inline-flex;align-items:center;gap:6px;background:#0d2137;border:1px solid #1565c0;border-radius:999px;padding:4px 10px;font-size:.72rem;color:#c9d1d9}}
+.rec-chip button{{background:none;border:none;color:#ff9a9a;cursor:pointer;font-size:.8rem;line-height:1;padding:0 0 1px}}
+#recommended-empty{{font-size:.72rem;color:#8090b0;margin-bottom:10px}}
+#recommended-calendar{{margin-bottom:10px}}
+#proposed-sections-wrap{{display:none}}
+.rec-cal-empty{{font-size:.72rem;color:#8090b0;margin-bottom:8px}}
+.rec-cal-wrap{{border:1px solid #283452;border-radius:6px;background:#0f1a33;padding:8px 9px;margin-bottom:7px}}
+.rec-cal-term{{font-size:.66rem;color:#a0c4ff;text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px;font-weight:600}}
+.rec-cal-item{{position:relative;font-size:.72rem;color:#c9d1d9;padding:4px 18px 4px 0;border-bottom:1px dashed #1b2a4a}}
+.rec-cal-item:last-child{{border-bottom:none}}
+.rec-cal-item strong{{color:#e0e0e0;font-weight:600}}
+.rec-cal-item span{{display:block;color:#8fa0c0;font-size:.68rem;margin-top:1px}}
+.rec-cal-rm{{position:absolute;top:5px;right:0;background:none;border:none;color:#ff8b8b;cursor:pointer;font-size:.88rem;line-height:1;padding:0}}
+.rec-cal-rm:hover{{color:#ff5f5f}}
+.rec-mini-wrap{{padding:7px 8px}}
+.rec-mini-grid{{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:4px;max-height:210px;overflow:hidden}}
+.rec-mini-day{{border:1px solid #1f2e4f;border-radius:5px;overflow:hidden;background:#0b142a}}
+.rec-mini-day-hdr{{font-size:.56rem;color:#8ea4ca;text-align:center;padding:2px 0;border-bottom:1px solid #1b2a4a;background:#0f1a33;font-weight:600}}
+.rec-mini-day-body{{position:relative;background:linear-gradient(180deg,#0a1224 0%,#0c1730 100%)}}
+.rec-mini-block{{position:absolute;left:1px;right:1px;border-radius:3px;padding:1px 12px 1px 3px;background:#163562;border-left:2px solid #2f6bc4;color:#dbe9ff;overflow:hidden;font-size:.52rem;line-height:1.2;display:flex;flex-direction:column;justify-content:center}}
+.rec-mini-block{{cursor:pointer;transition:background .12s ease,border-color .12s ease,color .12s ease}}
+.rec-mini-block.is-selected{{background:#1d5a2f;border-left-color:#6fd18a;color:#e9ffef;box-shadow:0 0 0 1px rgba(111,209,138,.35) inset}}
+.rec-mini-code{{display:inline-block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}}
+.rec-mini-meta{{display:inline-block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.48rem;color:#b8cdf3}}
+.rec-mini-rm{{position:absolute;top:1px;right:2px;background:none;border:none;color:#ff9f9f;cursor:pointer;font-size:.65rem;line-height:1;padding:0}}
+.rec-mini-rm:hover{{color:#ff6b6b}}
+.rec-mini-async{{display:flex;flex-wrap:wrap;gap:4px;margin-top:5px}}
+.rec-mini-async-chip{{display:inline-flex;align-items:center;gap:4px;border:1px solid #2b3e66;border-radius:999px;background:#0b1730;color:#9fb3d7;font-size:.6rem;padding:2px 7px}}
+.rec-mini-async-chip{{cursor:pointer;transition:background .12s ease,border-color .12s ease,color .12s ease}}
+.rec-mini-async-chip.is-selected{{background:#194528;border-color:#63bf7c;color:#e9ffef}}
+.rec-mini-more{{font-size:.6rem;color:#7f94ba;align-self:center}}
+#advisor-notes{{width:100%;min-height:78px;resize:vertical;background:#0d1b2e;border:1px solid #1f2b54;border-radius:6px;color:#e0e0e0;padding:8px 10px;font-size:.8rem;font-family:inherit}}
+#advisor-notes-hint{{font-size:.7rem;color:#8090b0;margin-top:6px}}
 </style>
 </head>
 <body>
 <svg id="arrows-svg"></svg>
-<div id="page-header">
+<div id="page-header" data-student-id="{student_id}">
   <h1>Curriculum Progress Report</h1>
   <div class="student-name">{student_name}</div>
   <div class="meta">{major} &bull; Start: {start_year}</div>
@@ -1745,7 +1883,7 @@ td[data-slot-cid]{{cursor:pointer}}
   <div class="legend-item"><div class="legend-swatch" style="background:#3e2400;border-color:#ff9800"></div>Below Min Grade</div>
   <div class="legend-item"><div class="legend-swatch" style="background:#252510;border:2px solid #d4aa00"></div>Eligible Now</div>
   <div class="legend-item"><div class="legend-swatch" style="background:#1c1500;border:2px dashed #ff8c00;box-shadow:0 0 0 2px #d4aa00;opacity:.85"></div>Eligible Next Semester</div>
-  <div class="legend-item"><div class="legend-swatch" style="background:#1c1c1c;border-color:#333;opacity:.55"></div>Locked</div>
+    <div class="legend-item"><div class="legend-swatch" style="background:#1c1c1c;border-color:#333;opacity:.55"></div>Proposed</div>
   <div class="legend-item" style="display:flex;align-items:center;gap:5px"><span style="width:7px;height:7px;background:#cc2222;border-radius:50%;display:inline-block;flex-shrink:0"></span>Prior attempt</div>
   <div class="legend-item"><div class="legend-swatch" style="border-top:2px solid #d4aa00;border-left:2px solid #d4aa00;border-right:2px solid #cc2222;border-bottom:2px solid #cc2222;background:#1f1a0a"></div>Manual Override</div>
 </div>
@@ -1757,10 +1895,29 @@ td[data-slot-cid]{{cursor:pointer}}
 {minors_html}
 {unmapped_html}
 {table_html}
+<div id="advisor-panel">
+    <h3>Recommended Courses (Next Semester/Summer)</h3>
+    <div id="recommended-empty">Mark an eligible course with + Next to build an advised path.</div>
+    <div id="recommended-courses-list"></div>
+    <div id="proposed-sections-wrap">
+        <h3>Proposed Sections (BETA)</h3>
+        <div id="recommended-calendar"></div>
+    </div>
+    <h3 style="margin-top:8px">Advising Notes</h3>
+    <textarea id="advisor-notes" placeholder="Notes for this advisee and plan..."></textarea>
+    <div id="advisor-notes-hint">Notes and recommendations are saved in this browser.</div>
+</div>
 <script>
 (function(){{
   var svg=document.getElementById('arrows-svg');
   var arrowsVisible=true;
+    var advisorStorageKey=(function(){{
+        var studentName=((document.querySelector('.student-name')||{{textContent:'unknown'}}).textContent||'unknown').trim().replace(/\s+/g,'_');
+        var header=document.getElementById('page-header');
+        var studentId=((header&&header.getAttribute('data-student-id'))||'unknown').trim().replace(/\s+/g,'_');
+        return 'advisingbot-advisor-'+studentName+'-'+studentId+'-__MINOR_SESSION_ID__';
+    }})();
+    var recState={{items:[]}};
   var courseMap={{}};
   document.querySelectorAll('.course-box[data-cid]').forEach(function(el){{
     var cid=el.getAttribute('data-cid');
@@ -1837,7 +1994,7 @@ td[data-slot-cid]{{cursor:pointer}}
   }}
   document.querySelectorAll('.course-box[data-cid]').forEach(function(box){{
     box.addEventListener('click',function(e){{
-      if(wasDragging||e.target.closest('.undo-btn,.ovr-btn,.attempt-dots')) return;
+            if(wasDragging||e.target.closest('.undo-btn,.ovr-btn,.rec-btn,.attempt-dots')) return;
       var cid=box.getAttribute('data-cid');
       var td=document.querySelector('td[data-slot-cid="'+cid+'"]');
       if(!td) return;
@@ -2045,6 +2202,118 @@ td[data-slot-cid]{{cursor:pointer}}
       }});
     }});
   }}
+
+    // ── Advisor recommendations + notes ─────────────────────────────────────
+    function saveAdvisorState(){{
+        try{{
+            var notesEl=document.getElementById('advisor-notes');
+            var payload={{items:recState.items,notes:notesEl?notesEl.value:''}};
+            sessionStorage.setItem(advisorStorageKey,JSON.stringify(payload));
+        }}catch(e){{}}
+    }}
+    function loadAdvisorState(){{
+        try{{
+            var raw=sessionStorage.getItem(advisorStorageKey);
+            if(!raw) return;
+            var parsed=JSON.parse(raw);
+            recState.items=Array.isArray(parsed.items)?parsed.items:[];
+            var notesEl=document.getElementById('advisor-notes');
+            if(notesEl && typeof parsed.notes==='string') notesEl.value=parsed.notes;
+        }}catch(e){{ recState.items=[]; }}
+    }}
+    function upsertRecommended(item){{
+        var idx=recState.items.findIndex(function(x){{return x.cid===item.cid;}});
+        if(idx>=0) recState.items[idx]=item;
+        else recState.items.push(item);
+    }}
+    function removeRecommended(cid){{
+        recState.items=recState.items.filter(function(x){{return x.cid!==cid;}});
+    }}
+    function currentRecommendableSet(){{
+        var s=new Set();
+        document.querySelectorAll('.course-box.eligible[data-cid],.course-box.nextelig[data-cid],.course-box.belowmin[data-cid]').forEach(function(el){{
+            var cid=(el.getAttribute('data-cid')||'').trim();
+            if(cid) s.add(cid);
+        }});
+        return s;
+    }}
+    function pruneRecommendationsToCurrent(){{
+        var allowed=currentRecommendableSet();
+        recState.items=(recState.items||[]).filter(function(it){{
+            return it && it.cid && allowed.has(String(it.cid).trim());
+        }});
+    }}
+    function renderRecommended(){{
+        var list=document.getElementById('recommended-courses-list');
+        var empty=document.getElementById('recommended-empty');
+        if(!list||!empty) return;
+        if(!recState.items.length){{
+            list.innerHTML='';
+            empty.style.display='block';
+        }}else{{
+            empty.style.display='none';
+            list.innerHTML=recState.items.map(function(it){{
+                var term=it.termLabel?(' · '+it.termLabel):'';
+                return '<span class="rec-chip" data-cid="'+it.cid+'">'+it.cid+' — '+it.cname+term
+                    +'<button type="button" data-remove="'+it.cid+'">×</button></span>';
+            }}).join('');
+            list.querySelectorAll('button[data-remove]').forEach(function(btn){{
+                btn.addEventListener('click',function(e){{
+                    e.stopPropagation();
+                    var cid=btn.getAttribute('data-remove');
+                    removeRecommended(cid);
+                    document.querySelectorAll('.course-box[data-cid="'+cid+'"]').forEach(function(box){{
+                        box.classList.remove('is-recommended');
+                        var rb=box.querySelector('.rec-btn');
+                        if(rb) rb.textContent='+ Next';
+                    }});
+                    renderRecommended();
+                    saveAdvisorState();
+                }});
+            }});
+        }}
+    }}
+    function bindRecommendButtons(){{
+        document.querySelectorAll('.course-box .rec-btn').forEach(function(btn){{
+            btn.addEventListener('click',function(e){{
+                e.stopPropagation();
+                var box=btn.closest('.course-box');
+                if(!box) return;
+                var cid=(box.getAttribute('data-cid')||'').trim();
+                if(!cid) return;
+                var cname=((box.querySelector('.cname')||{{textContent:''}}).textContent||'').trim();
+                var termLabel=(box.getAttribute('data-term-label')||'').trim();
+                var active=box.classList.contains('is-recommended');
+                if(active){{
+                    box.classList.remove('is-recommended');
+                    btn.textContent='+ Next';
+                    removeRecommended(cid);
+                }}else{{
+                    box.classList.add('is-recommended');
+                    btn.textContent='Added';
+                    upsertRecommended({{cid:cid,cname:cname,termLabel:termLabel}});
+                }}
+                renderRecommended();
+                saveAdvisorState();
+            }});
+        }});
+    }}
+
+    loadAdvisorState();
+    pruneRecommendationsToCurrent();
+    bindRecommendButtons();
+    recState.items.forEach(function(it){{
+        document.querySelectorAll('.course-box[data-cid="'+it.cid+'"]').forEach(function(box){{
+            if(!(box.classList.contains('eligible')||box.classList.contains('nextelig')||box.classList.contains('belowmin'))) return;
+            box.classList.add('is-recommended');
+            var rb=box.querySelector('.rec-btn');
+            if(rb) rb.textContent='Added';
+        }});
+    }});
+    renderRecommended();
+    saveAdvisorState();
+    var notesEl=document.getElementById('advisor-notes');
+    if(notesEl) notesEl.addEventListener('input',saveAdvisorState);
 }})();
 // ── Pool slot dropdowns ──────────────────────────────────────────────────
 function poolSlotClick(evt, el) {{

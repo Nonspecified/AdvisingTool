@@ -16,8 +16,10 @@ import logging
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import List, Optional
 from urllib.parse import quote
 
+import requests
 import pandas as pd
 from flask import Flask, request, render_template_string, redirect, make_response, jsonify, send_file
 
@@ -35,6 +37,11 @@ ACCESS_PASSWORD = os.environ.get("ADVISINGBOT_PASSWORD", "")
 # Sessions expire after 2 hours.
 _sessions: dict = {}
 
+APPINSIGHTS_CONNECTION_STRING = os.environ.get("APPLICATIONINSIGHTS_CONNECTION_STRING", "").strip()
+AZURE_STORAGE_CONNECTION_STRING = os.environ.get("AZURE_STORAGE_CONNECTION_STRING", "").strip()
+BUG_TABLE_NAME = "advisingbotbugreports"
+CATALOG_API_URL = "https://www.uml.edu/student-dashboard/api/ClassSchedule/RealTime/Search/"
+
 def _cleanup_sessions():
     cutoff = time.time() - 7200
     for k in list(_sessions):
@@ -42,9 +49,182 @@ def _cleanup_sessions():
             del _sessions[k]
 
 
-APPINSIGHTS_CONNECTION_STRING  = os.environ.get("APPLICATIONINSIGHTS_CONNECTION_STRING", "").strip()
-AZURE_STORAGE_CONNECTION_STRING = os.environ.get("AZURE_STORAGE_CONNECTION_STRING", "").strip()
-BUG_TABLE_NAME = "advisingbotbugreports"
+def _query_catalog(term: str, subject: str, catalog_number: str) -> dict:
+    params = {
+        "term": term,
+        "subjects": subject,
+        "partialCatalogNumber": catalog_number,
+    }
+    try:
+        resp = requests.get(CATALOG_API_URL, params=params, timeout=12)
+        resp.raise_for_status()
+        data = resp.json()
+    except requests.RequestException as exc:
+        raise RuntimeError(f"Catalog lookup failed: {exc}") from exc
+    except ValueError as exc:
+        raise RuntimeError(f"Catalog lookup returned invalid JSON: {exc}") from exc
+
+    if not data or "data" not in data:
+        raise RuntimeError("Catalog lookup returned no data.")
+    return data["data"]
+
+
+def _matches_status_filter(status_code: str, status_filter: str) -> bool:
+    status_code = (status_code or "").upper()
+    if status_filter == "open":
+        return status_code == "O"
+    if status_filter == "open_wait":
+        return status_code in {"O", "W"}
+    return True
+
+
+def _compute_effective_enrollment_status(details: dict) -> tuple[str, str]:
+    enrollment = details.get("EnrollmentStatus", {}) or {}
+    raw_code = (enrollment.get("Code") or "").upper()
+    raw_label = (enrollment.get("Description") or "").strip()
+
+    class_status = (details.get("ClassStatus", {}) or {}).get("Code", "")
+    class_status = str(class_status or "").upper().strip()
+
+    def _to_int(v):
+        try:
+            if v is None or str(v).strip() == "":
+                return None
+            return int(float(v))
+        except (TypeError, ValueError):
+            return None
+
+    cap = _to_int(details.get("EnrollmentCapacity"))
+    total = _to_int(details.get("EnrollmentTotal"))
+    wl_cap = _to_int(details.get("WaitListCapacity"))
+    wl_total = _to_int(details.get("WaitListTotal"))
+
+    # If section is not active, treat as closed for advising purposes.
+    if class_status and class_status != "A":
+        return "C", "Closed"
+
+    if raw_code in {"C", "W", "O"}:
+        code = raw_code
+    else:
+        code = "O"
+
+    # Seat/waitlist heuristics to correct stale/misleading tags.
+    if cap is not None and total is not None and total >= cap:
+        if wl_cap is not None and wl_total is not None and wl_cap > 0 and wl_total < wl_cap:
+            return "W", "Wait List"
+        return "C", "Closed"
+
+    if code == "O":
+        return "O", "Open"
+    if code == "W":
+        return "W", "Wait List"
+    if code == "C":
+        return "C", "Closed"
+    return "O", raw_label or "Open"
+
+
+def _meeting_days(meeting: dict) -> List[str]:
+    mapping = [
+        ("IsMonday", "Mon"),
+        ("IsTuesday", "Tue"),
+        ("IsWednesday", "Wed"),
+        ("IsThursday", "Thu"),
+        ("IsFriday", "Fri"),
+        ("IsSaturday", "Sat"),
+        ("IsSunday", "Sun"),
+    ]
+    return [abbr for key, abbr in mapping if meeting.get(key)]
+
+
+def _minutes_from_time(timestr: Optional[str]) -> Optional[int]:
+    if not timestr:
+        return None
+    try:
+        hours, minutes, *_ = timestr.split(":")
+        return int(hours) * 60 + int(minutes)
+    except ValueError:
+        return None
+
+
+def _sections_conflict(sec_a: dict, sec_b: dict) -> bool:
+    for m1 in sec_a.get("meetings", []):
+        for m2 in sec_b.get("meetings", []):
+            if not m1.get("days") or not m2.get("days"):
+                continue
+            if set(m1["days"]) & set(m2["days"]):
+                s1, e1 = m1.get("start"), m1.get("end")
+                s2, e2 = m2.get("start"), m2.get("end")
+                if s1 is None or e1 is None or s2 is None or e2 is None:
+                    continue
+                if not (e1 <= s2 or e2 <= s1):
+                    return True
+    return False
+
+
+def _ensure_schedule_state(session: dict) -> dict:
+    if "schedule" not in session:
+        session["schedule"] = {"locked": []}
+    return session["schedule"]
+
+
+def _drop_conflicting_sections(schedule_state: dict, new_section: dict) -> None:
+    locked = schedule_state.get("locked", [])
+    retained = []
+    for section in locked:
+        same_component = (
+            section.get("subject") == new_section.get("subject")
+            and section.get("catalog") == new_section.get("catalog")
+            and section.get("component_code") == new_section.get("component_code")
+        )
+        if same_component or _sections_conflict(section, new_section):
+            continue
+        retained.append(section)
+    schedule_state["locked"] = retained
+
+
+def _format_meeting(meeting: dict) -> dict:
+    days = _meeting_days(meeting)
+    return {
+        "days": days,
+        "start": _minutes_from_time(meeting.get("StartTime") or meeting.get("StartTimeFormatted")),
+        "end": _minutes_from_time(meeting.get("EndTime") or meeting.get("EndTimeFormatted")),
+        "start_label": meeting.get("StartTimeFormatted") or meeting.get("StartTime") or "TBD",
+        "end_label": meeting.get("EndTimeFormatted") or meeting.get("EndTime") or "TBD",
+        "location": meeting.get("Facility", {}).get("Description") or "TBD",
+        "meeting_id": meeting.get("Number"),
+    }
+
+
+def _format_section_entry(class_entry: dict) -> dict:
+  details = class_entry.get("Details", {})
+  status_code, status_label = _compute_effective_enrollment_status(details)
+  class_number = class_entry.get("ClassNumber") or details.get("ClassNumber")
+  section = details.get("Section") or class_entry.get("Section") or details.get("AssociatedClass")
+  meetings = [
+    _format_meeting(m)
+    for m in class_entry.get("Meetings", [])
+  ]
+  return {
+    "id": f"{class_entry.get('Term', {}).get('Code')}-{class_number or class_entry.get('CourseId')}-{details.get('Component', {}).get('Code', '')}",
+    "subject": details.get("Subject", ""),
+    "catalog": details.get("CatalogNumber", ""),
+    "course_title": details.get("CourseTitle", ""),
+    "section": str(section or ""),
+    "term": class_entry.get("Term", {}).get("Code", ""),
+    "component": details.get("Component", {}).get("Description", ""),
+    "component_code": details.get("Component", {}).get("Code", ""),
+    "status_code": status_code,
+    "status_label": status_label,
+    "is_open": status_code == "O",
+    "meetings": meetings,
+    "enrollment_capacity": details.get("EnrollmentCapacity"),
+    "enrollment_total": details.get("EnrollmentTotal"),
+    "waitlist_capacity": details.get("WaitListCapacity"),
+    "waitlist_total": details.get("WaitListTotal"),
+    "prereqs": details.get("EnrollmentRequirements", ""),
+    "class_number": class_number,
+    "session_desc": class_entry.get("Session", {}).get("Description"),
+  }
 
 
 def _get_appinsights_logger():
@@ -76,7 +256,7 @@ def _persist_bug_report(report: dict) -> None:
                 "RowKey":       str(uuid.uuid4()),
             }
             for k, v in report.items():
-                entity[k] = str(v)[:32000]   # Table Storage max string length
+                entity[k] = str(v)[:32000]
             table.upsert_entity(entity)
             saved = True
         except Exception as exc:
@@ -210,17 +390,10 @@ def _inject_chrome(html_content: str, session_id: str) -> str:
   border:none;width:100%;text-align:left;font-family:inherit}}
 .export-item:hover{{background:#0f3460;color:#fff}}
 /* bug report controls */
-#bug-icon{{font-size:1.05rem;line-height:1;padding:2px;background:none;border:none;
-  color:#fff;opacity:.45;cursor:pointer}}
-#bug-icon:hover{{opacity:1}}
-#bug-fab{{position:fixed;right:18px;bottom:18px;z-index:10003;
-  width:46px;height:46px;border-radius:999px;border:1px solid #ff4d4d;
-  background:#9d1010;color:#fff;display:flex;align-items:center;justify-content:center;
-  font-size:1.15rem;box-shadow:0 8px 20px rgba(0,0,0,.45);
-  transition:transform .12s ease,background .12s ease,box-shadow .12s ease}}
-#bug-fab:hover{{background:#c31717;transform:translateY(-1px);
-  box-shadow:0 10px 24px rgba(0,0,0,.5)}}
-#bug-fab,#bug-icon{{font-family:inherit;line-height:1}}
+#bug-icon{{background:#9d1010;color:#fff;border:1px solid #ff4d4d;border-radius:6px;
+  padding:4px 10px;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:5px}}
+#bug-icon:hover{{background:#c31717;color:#fff}}
+.bug-glyph{{display:inline-flex;align-items:center;justify-content:center;line-height:1;font-size:1.15rem}}
 /* bug modal */
 #bug-modal-overlay{{display:none;position:fixed;inset:0;z-index:10004;background:rgba(0,0,0,.58);backdrop-filter:blur(2px)}}
 #bug-modal{{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:10005;
@@ -240,6 +413,57 @@ def _inject_chrome(html_content: str, session_id: str) -> str:
 .bug-btn.primary{{background:#9d1010;border-color:#ff4d4d;color:#fff}}
 .bug-btn.primary:hover{{background:#c31717}}
 #bug-save-note{{font-size:.72rem;color:#8090b0;margin-top:8px;display:none}}
+/* schedule builder panel */
+#schedule-panel{{position:fixed;top:60px;right:-430px;bottom:60px;width:420px;max-width:90vw;
+  background:#0c1230;border:1px solid #1f2b54;border-radius:10px;box-shadow:0 20px 45px rgba(0,0,0,.55);
+  z-index:10003;transition:right .25s ease;display:flex;flex-direction:column;overflow:hidden}}
+#schedule-panel.open{{right:18px}}
+#schedule-panel-header{{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid #19244b}}
+#schedule-panel-header h3{{margin:0;font-size:.95rem;color:#a0c4ff}}
+#schedule-panel-close{{background:none;border:none;color:#8090b0;font-size:1.35rem;cursor:pointer}}
+#schedule-panel-body{{flex:1;overflow-y:auto;padding:10px 16px;display:flex;flex-direction:column;gap:10px}}
+.schedule-field{{display:flex;flex-direction:column;gap:4px;font-size:.75rem;color:#9fb0cd}}
+.schedule-field input,.schedule-field select{{background:#0d1b2e;border:1px solid #1f2b54;border-radius:6px;padding:6px 10px;color:#e0e0e0;font-size:.85rem}}
+.schedule-status-row{{display:flex;gap:8px;font-size:.72rem}}
+.schedule-status-row label{{display:flex;align-items:center;gap:4px;cursor:pointer}}
+.schedule-results{{display:flex;flex-direction:column;gap:6px;}}
+.schedule-result{{border:1px solid #283452;border-radius:6px;padding:8px;display:flex;flex-direction:column;gap:4px;background:#0f1a33}}
+.schedule-result-header{{display:flex;align-items:center;justify-content:space-between;gap:6px}}
+.schedule-result-title{{font-size:.8rem;color:#e0e0e0}}
+.schedule-result-meta{{font-size:.72rem;color:#8693bf}}
+.schedule-result button{{align-self:flex-start;background:#0f3460;border:1px solid #1a56c0;border-radius:6px;padding:4px 10px;color:#a0c4ff;font-size:.72rem;cursor:pointer}}
+/* schedule visual grid */
+.schedule-calendar{{min-height:40px}}
+.sched-cal-wrap{{margin-bottom:8px}}
+.sched-term-lbl{{font-size:.65rem;color:#8090b0;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px;font-weight:600;padding:0 2px}}
+.sched-grid{{border:1px solid #283452;border-radius:6px;background:#080f1e;overflow:hidden}}
+.sched-grid-hdr{{display:flex;border-bottom:1px solid #283452}}
+.sched-time-hdr{{width:30px;flex-shrink:0;border-right:1px solid #283452}}
+.sched-day-hdr{{flex:1;text-align:center;padding:3px 0;color:#8090b0;border-right:1px solid #1e2d50;font-size:.58rem;font-weight:600}}
+.sched-day-hdr:last-child{{border-right:none}}
+.sched-grid-body{{display:flex}}
+.sched-time-col{{width:30px;flex-shrink:0;position:relative;border-right:1px solid #283452}}
+.sched-time-tick{{position:absolute;left:0;right:0;text-align:right;padding-right:3px;font-size:.48rem;color:#4a5a7a;transform:translateY(-50%)}}
+.sched-day-cols{{flex:1;display:flex}}
+.sched-day-col{{flex:1;position:relative;border-right:1px solid #131e35}}
+.sched-day-col:last-child{{border-right:none}}
+.sched-hour-line{{position:absolute;left:0;right:0;border-top:1px solid #131e35;pointer-events:none}}
+.sched-block{{position:absolute;left:1px;right:1px;border-radius:3px;padding:2px 3px;overflow:hidden;display:flex;flex-direction:column;justify-content:center;cursor:default;border-left:3px solid}}
+.sched-block:hover .sched-rm{{opacity:1}}
+.sched-block.is-selected{{box-shadow:0 0 0 2px #6fd18a inset,0 0 0 1px rgba(111,209,138,.45)}}
+.sched-block .sb-c{{font-size:.55rem;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.25}}
+.sched-block .sb-t{{font-size:.5rem;opacity:.75;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.25}}
+.sched-rm{{position:absolute;top:1px;right:2px;background:none;border:none;color:inherit;cursor:pointer;font-size:.75rem;opacity:0;transition:opacity .1s;padding:0;line-height:1}}
+.sched-no-time{{display:flex;flex-direction:column;gap:3px;margin-top:5px}}
+.sched-no-time-row{{display:flex;align-items:center;justify-content:space-between;padding:4px 8px;border-radius:4px;font-size:.68rem;border:1px solid}}
+.sched-no-time-row.is-selected{{box-shadow:0 0 0 2px #6fd18a inset,0 0 0 1px rgba(111,209,138,.45)}}
+.sched-no-time-row .sched-rm{{position:static;opacity:1;font-size:.7rem}}
+.schedule-summary{{border:1px solid #283452;border-radius:6px;padding:10px;background:#0f1a33;color:#b3c2e1;font-size:.75rem;margin-top:10px;min-height:80px;display:flex;flex-direction:column;gap:6px}}
+.schedule-summary-empty{{color:#607090;font-size:.7rem}}
+.schedule-summary-entry{{border:1px solid #16213e;border-radius:6px;padding:6px 8px;background:#11193a}}
+.schedule-summary-entry strong{{color:#e0e0e0}}
+.schedule-summary-entry span{{display:block;font-size:.72rem;color:#9fb0cd}}
+.schedule-note{{font-size:.7rem;color:#8090b0}}
 /* minor overlay & panel */
 #minor-overlay{{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);
   z-index:10000;backdrop-filter:blur(2px)}}
@@ -292,6 +516,7 @@ body{{padding-top:44px!important}}
   <div id="session-meta-text">{meta_line}</div>
   <div id="nav-controls">
     <button class="nav-btn" type="button" onclick="window.print()">PDF</button>
+    <button class="nav-btn" id="schedule-btn" type="button">Schedule Builder</button>
     <div id="export-wrap">
       <button class="nav-btn" id="export-btn" type="button">Export &#9660;</button>
       <div id="export-dropdown">
@@ -301,11 +526,9 @@ body{{padding-top:44px!important}}
     </div>
     <button class="nav-btn" id="open-minor-btn" type="button">Minors (beta)</button>
     <button class="nav-btn" type="button" onclick="location.href='/'">New Student</button>
-    <button id="bug-icon" type="button" title="Report a bug"><svg width="17" height="17" viewBox="0 0 28 28" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M15 2H5a2 2 0 0 0-2 2v20a2 2 0 0 0 2 2h10.5"/><path d="M15 2v6h6" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="6" y="10" width="6" height="1.8" rx=".9" fill="white" fill-opacity=".55"/><rect x="6" y="13.5" width="8" height="1.8" rx=".9" fill="white" fill-opacity=".55"/><rect x="6" y="17" width="5" height="1.8" rx=".9" fill="white" fill-opacity=".55"/><circle cx="21" cy="17" r="2.5"/><ellipse cx="21" cy="23" rx="4.5" ry="5"/><path d="M16.5 20l-3.5-1.5M16.5 23l-3.5 0M16.5 26l-3.5 1.5M25.5 20l3.5-1.5M25.5 23l3.5 0M25.5 26l3.5 1.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" fill="none"/><ellipse cx="21" cy="23.5" rx="1.2" ry="2.2" fill="white" fill-opacity=".35"/></svg></button>
+    <button id="bug-icon" type="button" title="Report a bug"><svg width="15" height="15" viewBox="0 0 28 28" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M15 2H5a2 2 0 0 0-2 2v20a2 2 0 0 0 2 2h10.5"/><path d="M15 2v6h6" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="6" y="10" width="6" height="1.8" rx=".9" fill="white" fill-opacity=".55"/><rect x="6" y="13.5" width="8" height="1.8" rx=".9" fill="white" fill-opacity=".55"/><rect x="6" y="17" width="5" height="1.8" rx=".9" fill="white" fill-opacity=".55"/><circle cx="21" cy="17" r="2.5"/><ellipse cx="21" cy="23" rx="4.5" ry="5"/><path d="M16.5 20l-3.5-1.5M16.5 23l-3.5 0M16.5 26l-3.5 1.5M25.5 20l3.5-1.5M25.5 23l3.5 0M25.5 26l3.5 1.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" fill="none"/><ellipse cx="21" cy="23.5" rx="1.2" ry="2.2" fill="white" fill-opacity=".35"/></svg><span>Report Bug</span></button>
   </div>
 </div>
-
-<button id="bug-fab" type="button" title="Report a bug"><svg width="22" height="22" viewBox="0 0 28 28" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M15 2H5a2 2 0 0 0-2 2v20a2 2 0 0 0 2 2h10.5"/><path d="M15 2v6h6" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="6" y="10" width="6" height="1.8" rx=".9" fill="white" fill-opacity=".55"/><rect x="6" y="13.5" width="8" height="1.8" rx=".9" fill="white" fill-opacity=".55"/><rect x="6" y="17" width="5" height="1.8" rx=".9" fill="white" fill-opacity=".55"/><circle cx="21" cy="17" r="2.5"/><ellipse cx="21" cy="23" rx="4.5" ry="5"/><path d="M16.5 20l-3.5-1.5M16.5 23l-3.5 0M16.5 26l-3.5 1.5M25.5 20l3.5-1.5M25.5 23l3.5 0M25.5 26l3.5 1.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" fill="none"/><ellipse cx="21" cy="23.5" rx="1.2" ry="2.2" fill="white" fill-opacity=".35"/></svg></button>
 
 <div id="bug-modal-overlay"></div>
 <div id="bug-modal" role="dialog" aria-modal="true" aria-labelledby="bug-modal-title">
@@ -324,6 +547,53 @@ body{{padding-top:44px!important}}
     <button class="bug-btn primary" id="bug-submit" type="button">Save Report</button>
   </div>
   <div id="bug-save-note"></div>
+</div>
+
+<div id="schedule-panel" aria-live="polite">
+  <div id="schedule-panel-header">
+    <h3>Schedule Builder (beta)</h3>
+    <button id="schedule-panel-close" type="button" aria-label="Close">×</button>
+  </div>
+  <div id="schedule-panel-body">
+    <div class="schedule-field">
+      <span>Term</span>
+      <select id="schedule-term">
+        <option value="3610">2026 Fall</option>
+        <option value="3530">2026 Spring</option>
+        <option value="3620">2027 Spring</option>
+        <option value="3540">2026 Summer</option>
+      </select>
+    </div>
+    <div class="schedule-field">
+      <span>Course (manual entry or click a course on the map)</span>
+      <div style="display:flex;gap:6px;">
+        <input id="schedule-subject" placeholder="Subject (e.g., MECH)" maxlength="6">
+        <input id="schedule-catalog" placeholder="Catalog #" maxlength="8">
+      </div>
+    </div>
+    <div class="schedule-field">
+      <span>Recommended courses</span>
+      <select id="schedule-recommended">
+        <option value="">Select a recommended course...</option>
+      </select>
+    </div>
+    <div class="schedule-field" style="flex-direction:row;gap:6px;">
+      <input id="schedule-latest-class" placeholder="Class #" readonly>
+      <input id="schedule-latest-section" placeholder="Section" readonly>
+    </div>
+    <div class="schedule-status-row">
+      <label><input type="radio" name="schedule-status" value="open" checked> Open only</label>
+      <label><input type="radio" name="schedule-status" value="open_wait"> Open + waitlist</label>
+      <label><input type="radio" name="schedule-status" value="all"> Include closed</label>
+    </div>
+    <button class="nav-btn" id="schedule-search-btn" type="button">Search sections</button>
+    <div id="schedule-message" class="schedule-note"></div>
+    <div class="schedule-results" id="schedule-results"></div>
+    <div class="schedule-calendar" id="schedule-calendar">Proposed sections will appear here.</div>
+    <div class="schedule-summary" id="schedule-summary">
+      <div class="schedule-summary-empty">Proposed section details will appear here once you add something.</div>
+    </div>
+  </div>
 </div>
 
 <div id="minor-overlay">
@@ -390,10 +660,8 @@ body{{padding-top:44px!important}}
     bugModal.style.display = 'none';
   }}
 
-  ['bug-icon','bug-fab'].forEach(function(id){{
-    var el = document.getElementById(id);
-    if(el) el.addEventListener('click', openBugModal);
-  }});
+  var bugIcon = document.getElementById('bug-icon');
+  if(bugIcon) bugIcon.addEventListener('click', openBugModal);
   document.getElementById('bug-cancel').addEventListener('click', closeBugModal);
   bugOverlay.addEventListener('click', closeBugModal);
 
@@ -475,6 +743,7 @@ body{{padding-top:44px!important}}
       return '<span class="minor-chip">' + (minorIdx[code] || code) +
         '<button data-code="' + code + '" title="Remove">&#x2715;</button></span>';
     }}).join('');
+    setLatestInfo(sections[0]);
     el.querySelectorAll('button[data-code]').forEach(function(btn){{
       btn.addEventListener('click', function(){{ removeMinor(btn.dataset.code); }});
     }});
@@ -539,6 +808,679 @@ body{{padding-top:44px!important}}
       .then(reloadPage)
       .catch(function(){{ sessionStorage.removeItem('reopen-minors'); setLoading(false); }});
   }}
+
+  /* ── Schedule builder panel ── */
+  var schedulePanel = document.getElementById('schedule-panel');
+  var scheduleBtn = document.getElementById('schedule-btn');
+  var scheduleClose = document.getElementById('schedule-panel-close');
+  var scheduleSearch = document.getElementById('schedule-search-btn');
+  var scheduleResults = document.getElementById('schedule-results');
+  var scheduleCalendar = document.getElementById('schedule-calendar');
+  var scheduleMessage = document.getElementById('schedule-message');
+  var scheduleRecommended = document.getElementById('schedule-recommended');
+  var scheduleLatestClass = document.getElementById('schedule-latest-class');
+  var scheduleLatestSection = document.getElementById('schedule-latest-section');
+  var currentSections = [];
+  var lockedSections = [];
+  var selectedLockedSectionId = '';
+  var curriculumGrid = document.getElementById('curriculum-grid');
+
+  function formatMeetingSummary(section){{
+    var summaries = section.meetings.map(function(meeting){{
+      var days = meeting.days.length ? meeting.days.join('/') : 'TBD';
+      return days + ' ' + (meeting.start_label || 'TBD');
+    }});
+    return summaries.join(' | ') || 'No meeting data';
+  }}
+
+  function parseCourseId(cid){{
+    if(!cid) return null;
+    var trimmed = cid.trim().toUpperCase();
+    var strict = trimmed.match(/^([A-Z]{{2,6}})[\s.\-]*([0-9]{{3,4}}[A-Z]?)$/);
+    if(strict){{
+      return {{subject: strict[1], catalog: strict[2]}};
+    }}
+    var loose = trimmed.match(/([A-Z]{{2,6}})[^A-Z0-9]*([0-9]{{3,4}}[A-Z]?)/);
+    return loose ? {{subject: loose[1], catalog: loose[2]}} : null;
+  }}
+
+  function updateSelectedCourse(cid, name){{
+    var subjectInput = document.getElementById('schedule-subject');
+    var catalogInput = document.getElementById('schedule-catalog');
+    if(!subjectInput || !catalogInput) return;
+    var parsed = parseCourseId(cid);
+    if(parsed){{
+      subjectInput.value = parsed.subject;
+      catalogInput.value = parsed.catalog;
+      scheduleMessage.textContent = 'Ready to search ' + parsed.subject + '.' + parsed.catalog;
+    }} else {{
+      scheduleMessage.textContent = 'Could not parse that map course code.';
+    }}
+  }}
+
+  function advisorStorageKey(){{
+    var studentNameEl = document.querySelector('.student-name');
+    var studentName = studentNameEl ? (studentNameEl.textContent || '').trim() : 'unknown';
+    studentName = studentName.replace(/\s+/g, '_');
+    var header = document.getElementById('page-header');
+    var studentId = header ? (header.getAttribute('data-student-id') || '').trim() : '';
+    studentId = (studentId || 'unknown').replace(/\s+/g, '_');
+    return 'advisingbot-advisor-' + studentName + '-' + studentId + '-' + SESSION;
+  }}
+
+  function getAdvisorState(){{
+    try {{
+      var raw = sessionStorage.getItem(advisorStorageKey());
+      if(!raw) return {{}};
+      var parsed = JSON.parse(raw);
+      return parsed && typeof parsed === 'object' ? parsed : {{}};
+    }} catch(err) {{
+      return {{}};
+    }}
+  }}
+
+  function setAdvisorState(state){{
+    try {{
+      sessionStorage.setItem(advisorStorageKey(), JSON.stringify(state || {{}}));
+    }} catch(err) {{}}
+  }}
+
+  function syncLockedToAdvisorStorage(locked){{
+    var state = getAdvisorState();
+    state.locked_sections = Array.isArray(locked) ? locked : [];
+    setAdvisorState(state);
+  }}
+
+  function renderPersistentLockedCalendar(locked){{
+    var target = document.getElementById('recommended-calendar');
+    var wrap = document.getElementById('proposed-sections-wrap');
+    if(!target) return;
+    var sections = Array.isArray(locked) ? locked : [];
+    if(!sections.length){{
+      target.innerHTML = '';
+      if(wrap) wrap.style.display = 'none';
+      return;
+    }}
+    if(wrap) wrap.style.display = 'block';
+
+    var TERM_LABELS = {{'3610':'2026 Fall','3530':'2026 Spring','3620':'2027 Spring','3540':'2026 Summer'}};
+    var DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
+    var START_MIN = 480;   // 8:00
+    var END_MIN = 1200;    // 20:00
+    var PX_PER_MIN = 0.22; // compact but readable scale
+    var GRID_H = Math.round((END_MIN - START_MIN) * PX_PER_MIN);
+
+    var grouped = {{}};
+    sections.forEach(function(sec){{
+      var t = sec && sec.term ? String(sec.term) : 'unknown';
+      if(!grouped[t]) grouped[t] = [];
+      grouped[t].push(sec || {{}});
+    }});
+
+    function asMinutes(v){{
+      if(v == null || v === '') return null;
+      var n = Number(v);
+      return Number.isFinite(n) ? n : null;
+    }}
+
+    function toEvent(sec, meeting){{
+      var code = (sec.subject || '') + '.' + (sec.catalog || '');
+      var start = asMinutes(meeting.start);
+      var end = asMinutes(meeting.end);
+      return {{
+        id: sec.id || '',
+        code: code,
+        section: sec.section || '',
+        classNumber: sec.class_number || '',
+        title: sec.course_title || sec.component || 'Section',
+        start: start,
+        end: end,
+        startLabel: meeting.start_label || 'TBD',
+      }};
+    }}
+
+    function renderTermCalendar(termSections){{
+      var dayMap = {{Mon:[], Tue:[], Wed:[], Thu:[], Fri:[]}};
+      var asyncRows = [];
+
+      termSections.forEach(function(sec){{
+        var meetings = Array.isArray(sec.meetings) ? sec.meetings : [];
+        var placed = false;
+        meetings.forEach(function(m){{
+          var days = Array.isArray(m.days) ? m.days : [];
+          if(!days.length) return;
+          var event = toEvent(sec, m);
+          days.forEach(function(day){{
+            if(dayMap[day]){{
+              dayMap[day].push(event);
+              placed = true;
+            }}
+          }});
+        }});
+        if(!placed){{
+          asyncRows.push(sec);
+        }}
+      }});
+
+      var columnsHtml = DAYS.map(function(day){{
+        var blocks = dayMap[day].map(function(ev){{
+          var s = ev.start;
+          var e = ev.end;
+          var hasTime = s != null && e != null && e > s;
+          var top = hasTime ? Math.max(0, Math.round((Math.max(s, START_MIN) - START_MIN) * PX_PER_MIN)) : 2;
+          var height = hasTime ? Math.max(18, Math.round((Math.min(e, END_MIN) - Math.max(s, START_MIN)) * PX_PER_MIN)) : 18;
+          if(!hasTime || height <= 0){{
+            top = 2;
+            height = 18;
+          }}
+          var removeBtn = ev.id
+            ? '<button type="button" class="rec-mini-rm" data-unlock-persist="' + ev.id + '" title="Remove proposed section">×</button>'
+            : '';
+          var meta = 'Sec ' + (ev.section || '??') + (ev.classNumber ? ' · #' + ev.classNumber : '');
+          var tt = ev.code + ' ' + meta + ' · ' + ev.title + ' · ' + ev.startLabel;
+          var idAttr = ev.id ? ' data-proposed-id="' + ev.id + '"' : '';
+          return '<div class="rec-mini-block"' + idAttr + ' style="top:' + top + 'px;height:' + height + 'px" title="' + tt + '">'
+            + '<span class="rec-mini-code">' + ev.code + '</span>'
+            + '<span class="rec-mini-meta">' + meta + '</span>'
+            + removeBtn
+            + '</div>';
+        }}).join('');
+        return '<div class="rec-mini-day">'
+          + '<div class="rec-mini-day-hdr">' + day.substring(0,2) + '</div>'
+          + '<div class="rec-mini-day-body" style="height:' + GRID_H + 'px">' + blocks + '</div>'
+          + '</div>';
+      }}).join('');
+
+      var asyncHtml = '';
+      if(asyncRows.length){{
+        var shown = asyncRows.slice(0, 3);
+        asyncHtml = '<div class="rec-mini-async">' + shown.map(function(sec){{
+          var code = (sec.subject || '') + '.' + (sec.catalog || '');
+          var meta = 'Sec ' + (sec.section || '??') + (sec.class_number ? ' · #' + sec.class_number : '');
+          var removeBtn = sec.id
+            ? '<button type="button" class="rec-mini-rm" data-unlock-persist="' + sec.id + '" title="Remove proposed section">×</button>'
+            : '';
+          var idAttr = sec.id ? ' data-proposed-id="' + sec.id + '"' : '';
+          return '<span class="rec-mini-async-chip"' + idAttr + '>' + code + ' · ' + meta + removeBtn + '</span>';
+        }}).join('');
+        if(asyncRows.length > shown.length){{
+          asyncHtml += '<span class="rec-mini-more">+' + (asyncRows.length - shown.length) + ' more</span>';
+        }}
+        asyncHtml += '</div>';
+      }}
+
+      return '<div class="rec-mini-grid">' + columnsHtml + '</div>' + asyncHtml;
+    }}
+
+    var html = Object.keys(grouped).map(function(term){{
+      var label = TERM_LABELS[term] || term;
+      var cal = renderTermCalendar(grouped[term]);
+      return '<div class="rec-cal-wrap rec-mini-wrap"><div class="rec-cal-term">' + label + '</div>' + cal + '</div>';
+    }}).join('');
+    target.innerHTML = html;
+
+    function selectProposed(id){{
+      if(!id) return;
+      target.querySelectorAll('.rec-mini-block.is-selected,.rec-mini-async-chip.is-selected').forEach(function(el){{
+        el.classList.remove('is-selected');
+      }});
+      target.querySelectorAll('[data-proposed-id="' + id + '"]').forEach(function(el){{
+        el.classList.add('is-selected');
+      }});
+    }}
+
+    target.querySelectorAll('.rec-mini-block[data-proposed-id],.rec-mini-async-chip[data-proposed-id]').forEach(function(el){{
+      el.addEventListener('click', function(evt){{
+        if(evt.target && evt.target.closest('.rec-mini-rm')) return;
+        selectProposed(el.getAttribute('data-proposed-id') || '');
+      }});
+    }});
+
+    target.querySelectorAll('[data-unlock-persist]').forEach(function(btn){{
+      btn.addEventListener('click', function(){{
+        var id = btn.getAttribute('data-unlock-persist');
+        if(!id) return;
+        fetch('/schedule/lock', {{
+          method: 'POST',
+          headers: {{'Content-Type': 'application/json'}},
+          body: JSON.stringify({{session: SESSION, action: 'unlock', section: {{id: id}}}})
+        }})
+        .then(function(r){{ return r.json(); }})
+        .then(function(data){{
+          if(!data.ok){{ throw new Error(data.error || 'Unable to remove proposed section'); }}
+          scheduleMessage.textContent = 'Removed';
+          renderCalendar(data.locked || []);
+        }})
+        .catch(function(err){{
+          scheduleMessage.textContent = err.message || 'Unable to remove proposed section';
+        }});
+      }});
+    }});
+  }}
+
+  function loadRecommendedIntoSearch(){{
+    if(!scheduleRecommended) return;
+    scheduleRecommended.innerHTML = '<option value="">Select a recommended course...</option>';
+    var items = [];
+    try {{
+      var parsed = getAdvisorState();
+      if(Array.isArray(parsed.items)) items = parsed.items;
+    }} catch(err) {{
+      items = [];
+    }}
+
+    items.forEach(function(it){{
+      if(!it || !it.cid) return;
+      var opt = document.createElement('option');
+      var cid = String(it.cid).trim();
+      var cname = String(it.cname || '').trim();
+      var termLabel = String(it.termLabel || '').trim();
+      opt.value = cid;
+      opt.textContent = cid + (cname ? ' — ' + cname : '') + (termLabel ? ' (' + termLabel + ')' : '');
+      opt.dataset.cname = cname;
+      scheduleRecommended.appendChild(opt);
+    }});
+  }}
+
+  function setLatestInfo(section){{
+    var classText = '';
+    var sectionText = '';
+    if(section){{
+      if(section.class_number){{
+        classText = 'Class #' + section.class_number;
+      }}
+      if(section.section){{
+        sectionText = 'Section ' + section.section;
+      }}
+    }}
+    if(scheduleLatestClass){{
+      scheduleLatestClass.value = classText;
+    }}
+    if(scheduleLatestSection){{
+      scheduleLatestSection.value = sectionText;
+    }}
+  }}
+
+  function sectionsConflict(a, b){{
+    var meetingsA = Array.isArray(a.meetings) ? a.meetings : [];
+    var meetingsB = Array.isArray(b.meetings) ? b.meetings : [];
+    for(var i = 0; i < meetingsA.length; i++){{
+      var m1 = meetingsA[i] || {{}};
+      var d1 = Array.isArray(m1.days) ? m1.days : [];
+      if(!d1.length) continue;
+      for(var j = 0; j < meetingsB.length; j++){{
+        var m2 = meetingsB[j] || {{}};
+        var d2 = Array.isArray(m2.days) ? m2.days : [];
+        if(!d2.length) continue;
+        var sameDay = d1.some(function(day){{ return d2.indexOf(day) >= 0; }});
+        if(!sameDay) continue;
+        if(m1.start == null || m1.end == null || m2.start == null || m2.end == null) continue;
+        if(!(m1.end <= m2.start || m2.end <= m1.start)) return true;
+      }}
+    }}
+    return false;
+  }}
+
+  function conflictsWithProposed(section){{
+    return lockedSections.some(function(locked){{
+      if(!locked) return false;
+      var sameComponent =
+        (locked.subject || '') === (section.subject || '') &&
+        (locked.catalog || '') === (section.catalog || '') &&
+        (locked.component_code || '') === (section.component_code || '');
+      if(sameComponent) return true;
+      return sectionsConflict(locked, section);
+    }});
+  }}
+
+  function formatSeatSummary(section){{
+    function asNum(v){{
+      if(v === null || v === undefined || String(v).trim() === '') return null;
+      var n = Number(v);
+      return Number.isFinite(n) ? n : null;
+    }}
+    var cap = asNum(section.enrollment_capacity);
+    var total = asNum(section.enrollment_total);
+    var wlCap = asNum(section.waitlist_capacity);
+    var wlTotal = asNum(section.waitlist_total);
+
+    var enrolled = (total !== null && cap !== null) ? ('Enrolled ' + total + '/' + cap) : 'Enrolled —';
+    var waitlist = (wlTotal !== null && wlCap !== null) ? ('Waitlist ' + wlTotal + '/' + wlCap) : 'Waitlist —';
+    return enrolled + ' • ' + waitlist;
+  }}
+
+  function handleCourseMapClick(evt){{
+    var box = evt.target.closest('.course-box');
+    if(!box) return;
+    var cid = (box.dataset.cid || box.dataset.origCid || (box.querySelector('.cid') && box.querySelector('.cid').textContent) || '').trim();
+    if(!cid) return;
+    var cname = (box.dataset.origCname || (box.querySelector('.cname') && box.querySelector('.cname').textContent) || '').trim();
+    updateSelectedCourse(cid, cname);
+  }}
+
+  if(curriculumGrid){{
+    curriculumGrid.addEventListener('click', handleCourseMapClick);
+  }}
+
+  function renderScheduleResults(sections){{
+    currentSections = sections;
+    if(!sections.length){{
+      setLatestInfo(null);
+      scheduleResults.innerHTML = '<div class="schedule-note">No sections match that query.</div>';
+      return;
+    }}
+    scheduleResults.innerHTML = sections.map(function(section){{
+      var alreadyProposed = lockedSections.some(function(locked){{ return locked && locked.id === section.id; }});
+      var hasConflict = !alreadyProposed && conflictsWithProposed(section);
+      var actionHtml = '<button type="button" data-section-id="' + section.id + '">Propose section</button>';
+      if(alreadyProposed){{
+        actionHtml = '<div class="schedule-note">Already proposed</div>';
+      }} else if(hasConflict){{
+        actionHtml = '<div class="schedule-note">Conflicts with proposed sections</div>';
+      }}
+      return '<div class="schedule-result">'
+        + '<div class="schedule-result-header">'
+        + '<span class="schedule-result-title">' + (section.subject || '') + '.' + (section.catalog || '') + ' · ' + (section.course_title || section.component || 'Section') + '</span>'
+        + '<span>' + (section.status_label || section.status_code || '') + '</span>'
+        + '</div>'
+        + '<div class="schedule-result-meta">Section ' + (section.section || '??') + ' • ' + (section.component || 'Component') + '</div>'
+        + '<div class="schedule-result-meta">Class #' + (section.class_number || '??') + ' · ' + (section.session_desc || 'Session') + '</div>'
+        + '<div class="schedule-result-meta">' + formatSeatSummary(section) + '</div>'
+        + '<div class="schedule-result-meta">' + formatMeetingSummary(section) + '</div>'
+        + actionHtml
+        + '</div>';
+    }}).join('');
+    scheduleResults.querySelectorAll('[data-section-id]').forEach(function(btn){{
+      btn.addEventListener('click', function(){{
+        var id = btn.dataset.sectionId;
+        var section = currentSections.find(function(sec){{ return sec.id === id; }});
+        if(!section){{
+          scheduleMessage.textContent = 'Section data missing, refresh search.';
+          return;
+        }}
+        fetch('/schedule/lock', {{
+          method: 'POST',
+          headers: {{'Content-Type': 'application/json'}},
+          body: JSON.stringify({{session: SESSION, section: section}})
+        }})
+        .then(function(r){{ return r.json(); }})
+        .then(function(data){{
+          if(!data.ok){{ throw new Error(data.error || 'Lock failed'); }}
+          selectedLockedSectionId = section.id || '';
+          setLatestInfo(section);
+          scheduleMessage.textContent = 'Proposed ' + (section.subject || '') + '.' + (section.catalog || '') + ' · Sec ' + (section.section || '');
+          renderCalendar(data.locked);
+        }})
+        .catch(function(err){{
+          scheduleMessage.textContent = err.message;
+        }});
+      }});
+    }});
+  }}
+
+  function renderCalendar(locked){{
+    lockedSections = Array.isArray(locked) ? locked : [];
+    if(selectedLockedSectionId && !lockedSections.some(function(s){{ return s && s.id === selectedLockedSectionId; }})){{
+      selectedLockedSectionId = '';
+    }}
+    if(!selectedLockedSectionId && lockedSections.length){{
+      selectedLockedSectionId = lockedSections[0].id || '';
+    }}
+    if(!lockedSections.length){{
+      scheduleCalendar.innerHTML = '<div class="schedule-note">No proposed sections yet.</div>';
+      renderSummary([]);
+      syncLockedToAdvisorStorage([]);
+      renderPersistentLockedCalendar([]);
+      return;
+    }}
+
+    var TERM_LABELS = {{'3610':'2026 Fall','3530':'2026 Spring','3620':'2027 Spring','3540':'2026 Summer'}};
+    var COLORS = [
+      {{bg:'#0d2a54',bd:'#2a5ab0',tx:'#a0caff'}},
+      {{bg:'#0d3a1d',bd:'#2a7a4a',tx:'#90dfa0'}},
+      {{bg:'#3a0d3a',bd:'#8a2a8a',tx:'#dfa0df'}},
+      {{bg:'#3a2a0d',bd:'#7a5a1a',tx:'#dfb870'}},
+      {{bg:'#0d2a3a',bd:'#1a7a9a',tx:'#70c8df'}},
+      {{bg:'#3a0d0d',bd:'#8a2a2a',tx:'#df9090'}},
+    ];
+    var DAYS = ['Mon','Tue','Wed','Thu','Fri','Sat'];
+    var S_MIN = 480;   /* 8 AM */
+    var E_MIN = 1260;  /* 9 PM */
+    var PPM   = 0.85;  /* px per minute */
+    var TOTAL_H = Math.round((E_MIN - S_MIN) * PPM);
+
+    /* assign a stable color to each unique course */
+    var cmap = {{}};
+    var ci = 0;
+    lockedSections.forEach(function(s){{
+      var k = (s.subject||'')+'.'+(s.catalog||'');
+      if(!(k in cmap)){{ cmap[k] = COLORS[ci % COLORS.length]; ci++; }}
+    }});
+
+    /* group by term, max 2 */
+    var tOrder = [], tMap = {{}};
+    lockedSections.forEach(function(s){{
+      var t = s.term || 'unknown';
+      if(!(t in tMap)){{ tOrder.push(t); tMap[t] = []; }}
+      tMap[t].push(s);
+    }});
+    tOrder = tOrder.slice(0,2);
+
+    function fmtMin(m){{
+      if(m==null) return 'TBD';
+      var h=Math.floor(m/60), mn=m%60, suf=h<12?'am':'pm';
+      if(h>12) h-=12; if(h===0) h=12;
+      return h+':'+(mn<10?'0'+mn:mn)+suf;
+    }}
+
+    function buildGrid(label, sections){{
+      var dayMap = {{}};
+      DAYS.forEach(function(d){{ dayMap[d]=[]; }});
+      var noTime = [];
+
+      sections.forEach(function(s){{
+        var k = (s.subject||'')+'.'+(s.catalog||'');
+        var c = cmap[k];
+        var hasMtg = s.meetings && s.meetings.some(function(m){{
+          return m.days && m.days.length && m.start!=null && m.end!=null;
+        }});
+        if(!hasMtg){{ noTime.push({{s:s,c:c}}); return; }}
+        s.meetings.forEach(function(m){{
+          if(!m.days||!m.days.length||m.start==null||m.end==null) return;
+          m.days.forEach(function(d){{
+            if(dayMap[d]) dayMap[d].push({{s:s,m:m,c:c}});
+          }});
+        }});
+      }});
+
+      /* time column ticks */
+      var ticks='';
+      for(var h=8;h<=21;h++){{
+        var top=Math.round((h*60-S_MIN)*PPM);
+        var lbl=h<12?h+'am':h===12?'12pm':(h-12)+'pm';
+        ticks+='<div class="sched-time-tick" style="top:'+top+'px">'+lbl+'</div>';
+      }}
+
+      /* day columns */
+      var dcols=DAYS.map(function(day){{
+        var lines='',bks='';
+        for(var h=8;h<=21;h++){{
+          lines+='<div class="sched-hour-line" style="top:'+Math.round((h*60-S_MIN)*PPM)+'px"></div>';
+        }}
+        dayMap[day].forEach(function(e){{
+          var top=Math.max(0,Math.round((e.m.start-S_MIN)*PPM));
+          var ht =Math.max(16,Math.round((e.m.end-e.m.start)*PPM));
+          var k  =(e.s.subject||'')+'.'+(e.s.catalog||'');
+          var selectedCls = (e.s.id && e.s.id === selectedLockedSectionId) ? ' is-selected' : '';
+          bks+='<div class="sched-block'+selectedCls+'" data-select-locked="'+(e.s.id || '')+'" style="top:'+top+'px;height:'+ht+'px;background:'+e.c.bg+';border-color:'+e.c.bd+';color:'+e.c.tx+'"'
+              +' title="'+k+' Sec '+(e.s.section||'')+' '+fmtMin(e.m.start)+'–'+fmtMin(e.m.end)+'">'
+              +'<div class="sb-c">'+k+'</div>'
+              +'<div class="sb-t">'+fmtMin(e.m.start)+'–'+fmtMin(e.m.end)+'</div>'
+              +'<button class="sched-rm" data-unlock="'+e.s.id+'">×</button>'
+              +'</div>';
+        }});
+        return '<div class="sched-day-col">'+lines+bks+'</div>';
+      }}).join('');
+
+      var hdrs=DAYS.map(function(d){{
+        return '<div class="sched-day-hdr">'+d.substring(0,2)+'</div>';
+      }}).join('');
+
+      /* online/async (no meeting time) rows */
+      var noHtml='';
+      if(noTime.length){{
+        noHtml='<div class="sched-no-time">'
+          +noTime.map(function(e){{
+            var k=(e.s.subject||'')+'.'+(e.s.catalog||'')+' Sec '+(e.s.section||'');
+            var selectedCls = (e.s.id && e.s.id === selectedLockedSectionId) ? ' is-selected' : '';
+            return '<div class="sched-no-time-row'+selectedCls+'" data-select-locked="'+(e.s.id || '')+'" style="background:'+e.c.bg+';border-color:'+e.c.bd+';color:'+e.c.tx+'">'
+              +'<span>'+k+' (online/async)</span>'
+              +'<button class="sched-rm" data-unlock="'+e.s.id+'" style="opacity:1">× Remove</button>'
+              +'</div>';
+          }}).join('')
+          +'</div>';
+      }}
+
+      return '<div class="sched-cal-wrap">'
+        +'<div class="sched-term-lbl">'+label+'</div>'
+        +'<div class="sched-grid">'
+        +'<div class="sched-grid-hdr"><div class="sched-time-hdr"></div>'+hdrs+'</div>'
+        +'<div class="sched-grid-body">'
+        +'<div class="sched-time-col" style="height:'+TOTAL_H+'px">'+ticks+'</div>'
+        +'<div class="sched-day-cols" style="height:'+TOTAL_H+'px">'+dcols+'</div>'
+        +'</div></div>'+noHtml
+        +'</div>';
+    }}
+
+    scheduleCalendar.innerHTML = tOrder.map(function(t){{
+      return buildGrid(TERM_LABELS[t]||t, tMap[t]);
+    }}).join('');
+
+    scheduleCalendar.querySelectorAll('[data-select-locked]').forEach(function(el){{
+      el.addEventListener('click', function(evt){{
+        if(evt.target && evt.target.closest('.sched-rm')) return;
+        var id = el.getAttribute('data-select-locked') || '';
+        if(!id) return;
+        selectedLockedSectionId = id;
+        renderCalendar(lockedSections);
+      }});
+    }});
+
+    /* attach unlock handlers to all × buttons */
+    scheduleCalendar.querySelectorAll('.sched-rm[data-unlock]').forEach(function(btn){{
+      btn.addEventListener('click', function(e){{
+        e.stopPropagation();
+        var id = btn.dataset.unlock;
+        fetch('/schedule/lock', {{
+          method: 'POST',
+          headers: {{'Content-Type': 'application/json'}},
+          body: JSON.stringify({{session: SESSION, action: 'unlock', section: {{id: id}}}})
+        }})
+        .then(function(r){{ return r.json(); }})
+        .then(function(data){{
+          if(!data.ok){{ throw new Error(data.error || 'Unable to unlock'); }}
+          scheduleMessage.textContent = 'Removed';
+          renderCalendar(data.locked);
+        }})
+        .catch(function(err){{
+          scheduleMessage.textContent = err.message;
+        }});
+      }});
+    }});
+    syncLockedToAdvisorStorage(lockedSections);
+    renderPersistentLockedCalendar(lockedSections);
+    renderSummary(lockedSections);
+  }}
+
+  function renderSummary(locked){{
+    var summary = document.getElementById('schedule-summary');
+    if(!summary) return;
+    if(!locked.length){{
+      summary.innerHTML = '<div class="schedule-summary-empty">Proposed section details will appear here once you add something.</div>';
+      return;
+    }}
+    summary.innerHTML = locked.map(function(section){{
+      return '<div class="schedule-summary-entry">'
+        + '<strong>' + (section.subject || '') + '.' + (section.catalog || '') + ' · Sec ' + (section.section || '') + '</strong>'
+        + '<span>' + (section.course_title || section.component || 'Section') + '</span>'
+        + '<span>Class #' + (section.class_number || 'TBD') + ' · ' + (section.session_desc || 'Session') + '</span>'
+        + '<span>' + formatMeetingSummary(section) + '</span>'
+        + '<span>Status: ' + (section.status_label || section.status_code || 'Unknown') + '</span>'
+        + '</div>';
+    }}).join('');
+  }}
+
+  function refreshCalendar(){{
+    fetch('/schedule/calendar?session=' + encodeURIComponent(SESSION))
+      .then(function(r){{ return r.json(); }})
+      .then(function(data){{
+        if(!data.ok){{ throw new Error(data.error || 'Unable to load calendar'); }}
+        renderCalendar(data.locked);
+      }})
+      .catch(function(err){{
+        scheduleCalendar.innerHTML = '<div class="schedule-note">' + err.message + '</div>';
+      }});
+  }}
+
+  function getStatusFilter(){{
+    var checked = document.querySelector('input[name="schedule-status"]:checked');
+    return checked ? checked.value : 'open';
+  }}
+
+  function runSearch(subject, catalog){{
+    var term = document.getElementById('schedule-term').value;
+    if(!subject || !catalog){{
+      scheduleMessage.textContent = 'Enter both subject and catalog number.';
+      return;
+    }}
+    scheduleMessage.textContent = 'Searching...';
+    scheduleResults.innerHTML = '';
+    fetch('/schedule/search', {{
+      method: 'POST',
+      headers: {{'Content-Type': 'application/json'}},
+      body: JSON.stringify({{
+        session: SESSION,
+        term: term,
+        subject: subject,
+        catalog: catalog,
+        status_filter: getStatusFilter(),
+      }})
+    }})
+    .then(function(r){{ return r.json(); }})
+    .then(function(data){{
+      if(!data.ok){{ throw new Error(data.error || 'Search failed'); }}
+      scheduleMessage.textContent = data.sections.length + ' section(s) found.';
+      renderScheduleResults(data.sections);
+    }})
+    .catch(function(err){{
+      scheduleMessage.textContent = err.message;
+    }});
+  }}
+
+  scheduleBtn.addEventListener('click', function(){{
+    loadRecommendedIntoSearch();
+    schedulePanel.classList.add('open');
+    refreshCalendar();
+  }});
+  scheduleClose.addEventListener('click', function(){{
+    schedulePanel.classList.remove('open');
+  }});
+  scheduleSearch.addEventListener('click', function(){{
+    runSearch(document.getElementById('schedule-subject').value, document.getElementById('schedule-catalog').value);
+  }});
+  if(scheduleRecommended){{
+    scheduleRecommended.addEventListener('change', function(){{
+      var selected = scheduleRecommended.options[scheduleRecommended.selectedIndex];
+      if(!selected || !selected.value) return;
+      updateSelectedCourse(selected.value, selected.dataset.cname || '');
+    }});
+  }}
+
+  (function initPersistentLockedCalendar(){{
+    var state = getAdvisorState();
+    renderPersistentLockedCalendar(Array.isArray(state.locked_sections) ? state.locked_sections : []);
+  }})();
+
 }})();
 history.replaceState({{}}, '', '/');
 </script>
@@ -721,6 +1663,88 @@ def apply_minor():
     _sessions[session_id]["extra_minor_codes"] = codes
     html_content = _build_session_from_csv(session_id, extra_minor_codes=codes)
     return _inject_chrome(html_content, session_id), 200, {"Content-Type": "text/html; charset=utf-8"}
+
+
+@app.route("/schedule/search", methods=["POST"])
+def schedule_search():
+    payload = request.get_json(silent=True) or {}
+    session_id = (payload.get("session") or "").strip()
+    if not session_id or session_id not in _sessions:
+        return jsonify({"ok": False, "error": "Invalid session."}), 400
+
+    term = (payload.get("term") or "").strip()
+    subject = (payload.get("subject") or "").strip().upper()
+    catalog = (payload.get("catalog") or "").strip()
+    status_filter = payload.get("status_filter", "open")
+    if not term or not subject or not catalog:
+        return jsonify({"ok": False, "error": "Term, subject, and catalog number are required."}), 400
+
+    try:
+        catalog_data = _query_catalog(term, subject, catalog)
+    except RuntimeError as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+    sections = []
+    for cls in catalog_data.get("Classes", []):
+        details = cls.get("Details", {})
+        status_code, _ = _compute_effective_enrollment_status(details)
+        if not _matches_status_filter(status_code, status_filter):
+            continue
+        sections.append(_format_section_entry(cls))
+
+    session = _sessions[session_id]
+    schedule_state = _ensure_schedule_state(session)
+    schedule_state["last_search"] = {
+        "term": term,
+        "subject": subject,
+        "catalog": catalog,
+        "status_filter": status_filter,
+        "sections": sections,
+    }
+
+    return jsonify({
+        "ok": True,
+        "sections": sections,
+        "filters_used": catalog_data.get("SearchFiltersUsed", {}),
+        "quick_filters": catalog_data.get("QuickSearchFilterData", {}),
+    })
+
+
+@app.route("/schedule/lock", methods=["POST"])
+def schedule_lock():
+    payload = request.get_json(silent=True) or {}
+    session_id = (payload.get("session") or "").strip()
+    action = (payload.get("action") or "lock").strip().lower()
+    section = payload.get("section")
+
+    if not session_id or session_id not in _sessions:
+        return jsonify({"ok": False, "error": "Invalid session."}), 400
+
+    session = _sessions[session_id]
+    schedule_state = _ensure_schedule_state(session)
+
+    if action == "unlock" and section and section.get("id"):
+        schedule_state["locked"] = [s for s in schedule_state["locked"] if s.get("id") != section.get("id")]
+        return jsonify({"ok": True, "locked": schedule_state["locked"]})
+
+    if not section or not section.get("id"):
+        return jsonify({"ok": False, "error": "Section payload missing or malformed."}), 400
+
+    _drop_conflicting_sections(schedule_state, section)
+    if not any(s.get("id") == section.get("id") for s in schedule_state.get("locked", [])):
+        schedule_state.setdefault("locked", []).append(section)
+
+    return jsonify({"ok": True, "locked": schedule_state["locked"]})
+
+
+@app.route("/schedule/calendar", methods=["GET"])
+def schedule_calendar():
+    session_id = (request.args.get("session") or "").strip()
+    if not session_id or session_id not in _sessions:
+        return jsonify({"ok": False, "error": "Invalid session."}), 400
+
+    schedule_state = _ensure_schedule_state(_sessions[session_id])
+    return jsonify({"ok": True, "locked": schedule_state.get("locked", [])})
 
 
 @app.route("/report-bug", methods=["POST"])

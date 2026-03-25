@@ -6,3 +6,4 @@ flask>=3.0
 gunicorn>=21.0
 opencensus-ext-azure>=1.1
 azure-data-tables>=12.4
+requests>=2.31
