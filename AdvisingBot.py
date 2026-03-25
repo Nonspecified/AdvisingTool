@@ -133,7 +133,8 @@ COURSE_TRANSFER_RE = re.compile(
     r"^(?P<course_id>[A-Z]{2,5}\s+\d{4}\s*[A-Z]?)\s+"
     r"(?P<course_name>.+?)\s+"
     r"(?P<attempted>\d+\.\d{2})\s+"
-    r"(?P<grade>(?:T|A|B|C|D|F|P|S|U)(?:[+-])?)\s*$"
+    r"(?P<grade>(?:T|A|B|C|D|F|P|S|U)(?:[+-]?))"
+    r"(?:\s+.*)?$"
 )
 INCOMING_TRANSFER_ROW_RE = re.compile(
     r"^(?P<course_id>[A-Z]{2,5}\s+\d{4}\s*[A-Z]?)\s+"
@@ -327,7 +328,9 @@ def _parse_courses(lines: list) -> list:
                         "transfer_effective_date": transfer_effective_date,
                         "program": "", "plan": "", "plan_short": "",
                     })
-                    pending_transfer_target = False
+                # Always clear the flag after one attempt — the UML equivalent
+                # is always the very next non-blank line after "Transferred to Term … as".
+                pending_transfer_target = False
                 continue
             minc = INCOMING_TRANSFER_ROW_RE.match(ln)
             if minc:
