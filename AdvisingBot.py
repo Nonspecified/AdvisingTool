@@ -1708,6 +1708,9 @@ body{{font-family:"Segoe UI",Arial,sans-serif;background:#1a1a2e;color:#e0e0e0;m
 .flash-hl{{outline:2px solid #ff8c00!important;outline-offset:2px}}
 .undo-btn{{position:absolute;top:2px;right:2px;background:rgba(180,40,40,.8);color:#fff;border:none;border-radius:3px;width:15px;height:15px;font-size:.65rem;cursor:pointer;display:flex;align-items:center;justify-content:center;padding:0;line-height:1;z-index:10}}
 .undo-btn:hover{{background:#cc2222}}
+.ovr-btn{{position:absolute;bottom:3px;right:3px;background:rgba(30,100,30,.75);color:#a8f0a8;border:1px solid #2d6a4f;border-radius:3px;font-size:.52rem;padding:1px 4px;cursor:pointer;display:none;z-index:10;line-height:1.4;white-space:nowrap}}
+.course-box.eligible:hover .ovr-btn,.course-box.locked:hover .ovr-btn,.course-box.nextelig:hover .ovr-btn{{display:block}}
+.ovr-btn:hover{{background:rgba(30,130,30,.9)}}
 td[data-slot-cid]{{cursor:pointer}}
 /* ── override drag-drop ── */
 #unmapped{{margin-top:8px;font-size:.75rem;color:#666;background:#16213e;border:1px solid #0f3460;border-radius:6px;padding:8px 12px}}
@@ -1834,7 +1837,7 @@ td[data-slot-cid]{{cursor:pointer}}
   }}
   document.querySelectorAll('.course-box[data-cid]').forEach(function(box){{
     box.addEventListener('click',function(e){{
-      if(wasDragging||e.target.closest('.undo-btn,.attempt-dots')) return;
+      if(wasDragging||e.target.closest('.undo-btn,.ovr-btn,.attempt-dots')) return;
       var cid=box.getAttribute('data-cid');
       var td=document.querySelector('td[data-slot-cid="'+cid+'"]');
       if(!td) return;
@@ -1964,6 +1967,58 @@ td[data-slot-cid]{{cursor:pointer}}
     }});
     // Revert override's table rows back to original status
   }}
+  // ── Click-to-override (yellow / grey boxes) ───────────────────────────
+  function _applyClickOverride(box){{
+    var ovCid=box.getAttribute('data-cid')||'';
+    if(!ovCid) return;
+    box.classList.remove('completed','inprog','belowmin','eligible','locked','nextelig');
+    box.classList.add('override');
+    box.setAttribute('data-override-cid',ovCid);
+    courseMap[ovCid]=box;
+    var cidEl=box.querySelector('.cid');
+    if(cidEl) cidEl.innerHTML=ovCid+'<span style="font-size:.52rem;color:#cc2222;margin-left:3px">\u25b2OVR</span>';
+    // hide the trigger button
+    var ob=box.querySelector('.ovr-btn'); if(ob) ob.style.display='none';
+    // undo button
+    var undoBtn=document.createElement('button');
+    undoBtn.className='undo-btn'; undoBtn.title='Remove override'; undoBtn.textContent='\u00d7';
+    undoBtn.addEventListener('click',function(e){{
+      e.stopPropagation();
+      var origStatus=box.getAttribute('data-orig-status')||'locked';
+      var origCid=box.getAttribute('data-orig-cid')||ovCid;
+      box.classList.remove('override'); box.classList.add(origStatus);
+      box.removeAttribute('data-override-cid');
+      var cidEl2=box.querySelector('.cid'); if(cidEl2) cidEl2.textContent=origCid;
+      delete courseMap[ovCid];
+      undoBtn.remove();
+      var ob2=box.querySelector('.ovr-btn'); if(ob2) ob2.style.display='';
+      // restore CPR table row colour
+      document.querySelectorAll('td[data-slot-cid="'+ovCid+'"]').forEach(function(td){{
+        td.closest('tr').querySelectorAll('td').forEach(function(c){{
+          c.className=c.className.replace(/\\bcell-override\\b/,'cell-'+origStatus).trim();
+        }});
+        td.textContent=origCid;
+      }});
+      revertUnlocks(); drawArrows();
+    }});
+    box.appendChild(undoBtn);
+    // CPR table row
+    document.querySelectorAll('td[data-slot-cid="'+ovCid+'"]').forEach(function(td){{
+      td.closest('tr').querySelectorAll('td').forEach(function(c){{
+        c.className=c.className.replace(/\\bcell-\\S+/g,'').trim();
+        c.classList.add('cell-override');
+      }});
+      td.innerHTML=ovCid+'<span style="font-size:.58rem;color:#9a7c00;margin-left:3px">OVR</span>';
+    }});
+    propagateUnlocks(); drawArrows();
+  }}
+  // Inject trigger button into every eligible/locked/nextelig box
+  document.querySelectorAll('.course-box.eligible,.course-box.locked,.course-box.nextelig').forEach(function(box){{
+    var ob=document.createElement('button');
+    ob.className='ovr-btn'; ob.title='Mark as manually verified (advisor confirmed)'; ob.textContent='\u2713 override';
+    ob.addEventListener('click',function(e){{ e.stopPropagation(); _applyClickOverride(box); }});
+    box.appendChild(ob);
+  }});
   function propagateUnlocks(){{
     var sat=getSatisfied();
     var changed=true;
