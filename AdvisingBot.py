@@ -425,6 +425,171 @@ def convert_pdf_to_csv(pdf_path: Path) -> Path:
     return out_path
 
 
+# ── advising report text parsing constants ────────────────────────────────────
+_AR_NOISE = frozenset({
+    "*** view multiple offerings", "Table Pagination",
+    "First", "Previous", "Next", "Last", "Table Options",
+    "View All", "View 100", "Collapse All", "Expand All",
+    "View Course Details", "View Course List",
+})
+_AR_COURSE_ID_RE  = re.compile(r"^([A-Z]{2,5})\s{1,2}(\d{3,4}[A-Z]?)$")
+_AR_UNITS_RE      = re.compile(r"^\d+\.\d{2}$")
+_AR_TERM_RE       = re.compile(r"^(\d{4})\s+(Fall|Spring|Summer|Winter)$", re.I)
+_AR_GRADE_RE      = re.compile(r"^(A[+-]?|B[+-]?|C[+-]?|D[+-]?|F|W|P|S|T|CR)$", re.I)
+_AR_PAGINATION_RE = re.compile(r"^\d+-\d+ of \d+$")
+_AR_TERM_SUFFIX   = {"fall": "FA", "spring": "SP", "summer": "SU", "winter": "WI"}
+_AR_HEADER_RE     = re.compile(r"Advisee Requirements\s*(.+?)\s*(?:\([^)]*\))?\s*University", re.I)
+_AR_STUDENT_ID_RE = re.compile(r"Advisee Requirements.*?\((\d{6,9})\)", re.I)
+_AR_GPA_RE        = re.compile(r"GPA:.*?([\d.]+)\s+actual", re.I)
+
+
+def parse_advising_report_text(text: str, out_path: Path) -> Path:
+    """Parse a copied UML Advisee Requirements page into a transcript CSV.
+
+    The user must click 'Expand All' on the page before copying so that all
+    individual requirement-satisfaction rows are visible.  Returns out_path.
+    """
+    # ── clean lines ───────────────────────────────────────────────────────────
+    lines = []
+    for ln in text.splitlines():
+        s = ln.strip()
+        if not s or s in _AR_NOISE or _AR_PAGINATION_RE.match(s):
+            continue
+        lines.append(s)
+
+    # ── extract student header & GPA ──────────────────────────────────────────
+    full_name = student_id = cum_gpa = ""
+    header_text = "\n".join(lines[:10])
+    m = _AR_HEADER_RE.search(header_text)
+    if m:
+        full_name = m.group(1).strip()
+    m2 = _AR_STUDENT_ID_RE.search(header_text)
+    if m2:
+        student_id = m2.group(1).strip()
+    name_parts = full_name.split()
+    first_name = name_parts[0] if name_parts else ""
+    last_name  = " ".join(name_parts[1:]) if len(name_parts) > 1 else ""
+    for ln in lines:
+        m = _AR_GPA_RE.search(ln)
+        if m:
+            cum_gpa = m.group(1)
+            break
+
+    # ── detect major from section headers ─────────────────────────────────────
+    text_lower = text.lower()
+    if "mechanical engineering" in text_lower:
+        plan, plan_short = "Mechanical Engineering BSE", "ME"
+    elif "industrial engineering" in text_lower:
+        plan, plan_short = "Industrial Engineering BSE", "IE"
+    else:
+        plan, plan_short = "", ""
+
+    # ── state machine: collect course rows ───────────────────────────────────
+    # After stripping blank/noise lines, each taken/enrolled course appears as
+    # a contiguous sequence:  ID · Name · Units · Term · [Grade] · Status
+    course_rows: list[dict] = []
+    state = 0
+    cid = name = units = term = term_code = grade = ""
+
+    for ln in lines:
+        if state == 0:
+            if _AR_COURSE_ID_RE.match(ln):
+                cid = ln
+                state = 1
+
+        elif state == 1:          # course_id found → next line = name
+            name  = ln
+            state = 2
+
+        elif state == 2:          # name found → look for units
+            if _AR_UNITS_RE.match(ln):
+                units = ln
+                state = 3
+            elif _AR_COURSE_ID_RE.match(ln):
+                cid = ln; state = 1
+            else:
+                state = 0
+
+        elif state == 3:          # units found → look for term
+            m = _AR_TERM_RE.match(ln)
+            if m:
+                term      = ln
+                term_code = m.group(1) + _AR_TERM_SUFFIX[m.group(2).lower()]
+                state     = 4
+            elif _AR_COURSE_ID_RE.match(ln):
+                cid = ln; state = 1
+            else:
+                state = 0
+
+        elif state == 4:          # term found → look for grade or "Enrolled"
+            if ln == "Enrolled":
+                course_rows.append({"course_id": norm_id(cid), "course_name": name,
+                                    "term": term, "term_code": term_code,
+                                    "grade": "", "status_token": "Enrolled", "units": units})
+                state = 0
+            elif _AR_GRADE_RE.match(ln):
+                grade = ln.upper()
+                state = 5
+            elif _AR_COURSE_ID_RE.match(ln):
+                cid = ln; state = 1
+            else:
+                state = 0
+
+        elif state == 5:          # grade found → look for "Taken"
+            if ln == "Taken":
+                course_rows.append({"course_id": norm_id(cid), "course_name": name,
+                                    "term": term, "term_code": term_code,
+                                    "grade": grade, "status_token": "Taken", "units": units})
+                state = 0
+            elif _AR_COURSE_ID_RE.match(ln):
+                cid = ln; state = 1
+            else:
+                state = 0
+
+    # ── deduplicate: same (course_id, term_code) → prefer Taken over Enrolled ─
+    seen: dict[tuple, dict] = {}
+    for row in course_rows:
+        key = (row["course_id"], row["term_code"])
+        existing = seen.get(key)
+        if existing is None or (existing["status_token"] == "Enrolled" and row["status_token"] == "Taken"):
+            seen[key] = row
+
+    # ── convert to transcript CSV rows ────────────────────────────────────────
+    def _to_csv_row(row: dict) -> dict:
+        g, tok, u = row["grade"], row["status_token"], row["units"]
+        if tok == "Enrolled":
+            status, is_xfer, earned = "in_progress", "0", "0.00"
+        elif g == "T":
+            status, is_xfer, earned = "transfer", "1", u
+        elif g == "W":
+            status, is_xfer, earned = "withdrawn", "0", "0.00"
+        elif g == "F":
+            status, is_xfer, earned = "failed", "0", "0.00"
+        else:
+            status, is_xfer, earned = "passed", "0", u
+        return {
+            "course_id": row["course_id"], "course_name": row["course_name"],
+            "term": row["term"], "term_code": row["term_code"],
+            "grade": g, "status": status,
+            "attempted_credits": u, "earned_credits": earned, "grade_points": "",
+            "is_transfer": is_xfer,
+            "transfer_from": "Transfer" if is_xfer == "1" else "",
+            "transfer_effective_term": "", "transfer_effective_date": "",
+            "program": plan, "plan": plan, "plan_short": plan_short,
+            "full_name": full_name, "first_name": first_name, "last_name": last_name,
+            "student_id": student_id, "email": "",
+            "transcript_date": "", "source_file": "pasted_report", "cum_gpa": cum_gpa,
+        }
+
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    with out_path.open("w", newline="", encoding="utf-8") as f:
+        w = csv.DictWriter(f, fieldnames=TRANSCRIPT_HEADERS)
+        w.writeheader()
+        for row in seen.values():
+            w.writerow(_to_csv_row(row))
+    return out_path
+
+
 # ═══════════════════════════════════════════════════════════════════════════════
 # STEP 2 — CSV → filled_pathway.csv
 # ═══════════════════════════════════════════════════════════════════════════════

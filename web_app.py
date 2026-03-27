@@ -24,7 +24,7 @@ import pandas as pd
 from flask import Flask, request, render_template_string, redirect, make_response, jsonify, send_file
 
 # Import the three pipeline steps from the main application
-from AdvisingBot import convert_pdf_to_csv, fill_pathway, generate_html, _load_minor_index, _load_registry
+from AdvisingBot import convert_pdf_to_csv, parse_advising_report_text, fill_pathway, generate_html, _load_minor_index, _load_registry
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 20 * 1024 * 1024  # 20 MB upload limit
@@ -1500,7 +1500,7 @@ UPLOAD_FORM = """<!DOCTYPE html>
         max-width:360px;width:100%;text-align:center}
   h1{font-size:1.1rem;color:#a0c4ff;margin-bottom:4px}
   p{font-size:.8rem;color:#8090b0;margin-bottom:16px}
-  input[type=file]{display:block;width:100%;padding:7px 10px;margin-bottom:10px;
+  input[type=file]{display:block;width:100%;padding:7px 10px;margin-bottom:6px;
                    border:1px solid #1565c0;border-radius:6px;background:#0f3460;
                    color:#a0c4ff;font-size:.82rem;box-sizing:border-box;cursor:pointer}
   input[type=file]::file-selector-button{background:#1565c0;color:#fff;border:none;
@@ -1522,14 +1522,23 @@ UPLOAD_FORM = """<!DOCTYPE html>
   .track-note{font-size:.65rem;color:#8090b0;margin-top:5px}
   .err{color:#ff8080;font-size:.82rem;margin-top:12px}
   .note{font-size:.72rem;color:#556;margin-top:18px}
+  .or-divider{display:flex;align-items:center;gap:8px;margin:10px 0;color:#556;font-size:.75rem}
+  .or-divider::before,.or-divider::after{content:'';flex:1;height:1px;background:#0f3460}
+  textarea{display:block;width:100%;min-height:100px;padding:7px 10px;margin-bottom:10px;
+           border:1px solid #1565c0;border-radius:6px;background:#0f3460;color:#a0c4ff;
+           font-size:.75rem;box-sizing:border-box;resize:vertical;font-family:monospace}
+  .paste-hint{font-size:.7rem;color:#8090b0;margin-bottom:6px;text-align:left;line-height:1.4}
 </style>
 </head>
 <body>
 <div class="card">
   <h1>CPR Filler</h1>
-  <p>Upload a student transcript PDF to generate a Curriculum Progress Report.</p>
+  <p>Generate a Curriculum Progress Report from a transcript or advising report.</p>
   <form id="upload-form" method="POST" action="/process" enctype="multipart/form-data">
-    <input type="file" id="file-input" name="transcript" accept=".pdf" required>
+    <input type="file" id="file-input" name="transcript" accept=".pdf">
+    <div class="or-divider">or paste advising report</div>
+    <div class="paste-hint">On the Advisee Requirements page, click <strong style="color:#a0c4ff">Expand All</strong> at the bottom, then select all, copy, and paste below.</div>
+    <textarea name="paste_text" placeholder="Paste advising report here…"></textarea>
     <button type="submit">Generate CPR</button>
     <label class="manual-row">
       <input type="checkbox" id="manual-track-toggle"> Manually select track (if auto-detect fails)
@@ -1581,9 +1590,10 @@ def process():
         if submitted != ACCESS_PASSWORD:
             return _render_upload_form(error="Incorrect password."), 403
 
-    uploaded = request.files.get("transcript")
-    if not uploaded or not uploaded.filename.lower().endswith(".pdf"):
-        return _render_upload_form(error="Please upload a PDF file."), 400
+    paste_text = request.form.get("paste_text", "").strip()
+    uploaded   = request.files.get("transcript")
+    if not paste_text and (not uploaded or not uploaded.filename.lower().endswith(".pdf")):
+        return _render_upload_form(error="Please upload a PDF or paste an advising report."), 400
 
     track_choice = _normalize_track_choice(
         (request.form.get("track_choice") or "").strip()
@@ -1591,18 +1601,33 @@ def process():
 
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)
-        pdf_in = tmp / "transcript.pdf"
-        uploaded.save(str(pdf_in))
 
-        csv_path = convert_pdf_to_csv(pdf_in)
+        if paste_text:
+            csv_path = parse_advising_report_text(paste_text, tmp / "transcript.csv")
+        else:
+            pdf_in = tmp / "transcript.pdf"
+            uploaded.save(str(pdf_in))
+            csv_path = convert_pdf_to_csv(pdf_in)
+
         df_check = pd.read_csv(csv_path, engine="python")
-        sid_blank = df_check.get("student_id", pd.Series(dtype=str)).astype(str).str.strip().eq("").all()
-        name_blank = df_check.get("full_name", pd.Series(dtype=str)).astype(str).str.strip().replace("nan", "").eq("").all()
+        sid_blank  = df_check.get("student_id", pd.Series(dtype=str)).astype(str).str.strip().eq("").all()
+        name_blank = df_check.get("full_name",  pd.Series(dtype=str)).astype(str).str.strip().replace("nan", "").eq("").all()
         if df_check.empty or (sid_blank and name_blank):
+            if paste_text:
+                return _render_upload_form(
+                    error="No courses found. Make sure you clicked 'Expand All' before copying the advising report.",
+                    selected_track=track_choice,
+                ), 400
             return _render_upload_form(
                 error="This doesn't look like a UMass transcript. Please upload an official transcript PDF.",
                 selected_track=track_choice,
             ), 400
+
+        course_count = len(df_check)
+        low_course_warning = (
+            f"Only {course_count} course(s) detected — did you click 'Expand All' before copying?"
+            if paste_text and course_count < 5 else ""
+        )
 
         student_name = _first_valid_value(df_check, ["student_name", "full_name"]) or "Student"
         plan_display = _first_valid_value(df_check, ["plan_short", "plan"]) or "—"
@@ -1626,6 +1651,11 @@ def process():
                 error=f"{exc} Please select the matching track from the dropdown.",
                 selected_track=track_choice,
             ), 400
+
+        if low_course_warning:
+            banner = (f'<div style="background:#7a6000;color:#ffe082;padding:8px 16px;'
+                      f'font-size:.8rem;text-align:center">{low_course_warning}</div>')
+            html_content = html_content.replace("<body>", "<body>" + banner, 1)
 
     return _inject_chrome(html_content, session_id), 200, {"Content-Type": "text/html; charset=utf-8"}
 
