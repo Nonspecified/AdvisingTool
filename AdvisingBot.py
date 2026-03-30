@@ -1221,7 +1221,7 @@ def fill_pathway(transcript_csv: Path, extra_minor_codes: list = None, track_ove
         pre = str(row.get("prereq", "")).upper().strip()
         if not pre:
             return "Y"
-        found = re.findall(r"[A-Z]{2,}\.? ?\d{3,4}", pre)
+        found = extract_course_ids(pre)
         if not found:
             return "Y"
         for c in found:
@@ -1265,8 +1265,8 @@ def fill_pathway(transcript_csv: Path, extra_minor_codes: list = None, track_ove
         grey_mask = combined["viz_status"] == "grey"
         for idx in combined.index[grey_mask]:
             pre_str = str(combined.at[idx, "prereq"]).upper()
-            prereq_ids_found = re.findall(r"[A-Z]{2,}\.? ?\d{3,4}", pre_str)
-            if prereq_ids_found and all(norm_id(c) in future_met for c in prereq_ids_found):
+            prereq_ids_found = extract_course_ids(pre_str)
+            if prereq_ids_found and all(c in future_met for c in prereq_ids_found):
                 combined.at[idx, "viz_status"] = "next_eligible"
 
     # ── minor detection & processing ──────────────────────────────────────────
