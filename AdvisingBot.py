@@ -666,14 +666,38 @@ def _load_registry() -> dict:
 
 def _infer_major(df: pd.DataFrame) -> str:
     reg = _load_registry()
-    # Check plan_short first (exact match)
+    # Use the most recent non-empty plan_short (handles mid-degree program switches)
     if "plan_short" in df.columns:
-        vals = df["plan_short"].dropna().astype(str).str.upper()
-        for key, info in reg.items():
-            for short in info.get("plan_short_values", [key]):
-                if (vals == short.upper()).any():
-                    return key
-    # Fall back to plan text contains
+        plan_short_col = df["plan_short"].dropna().astype(str).str.upper().str.strip()
+        plan_short_col = plan_short_col[plan_short_col != ""]
+        if not plan_short_col.empty and "term_code" in df.columns:
+            sorted_idx = df.loc[plan_short_col.index].sort_values(
+                "term_code", key=lambda c: c.map(_term_sort_key)
+            ).index
+            latest_short = plan_short_col.loc[sorted_idx[-1]]
+        elif not plan_short_col.empty:
+            latest_short = plan_short_col.iloc[-1]
+        else:
+            latest_short = None
+        if latest_short:
+            for key, info in reg.items():
+                for short in info.get("plan_short_values", [key]):
+                    if latest_short == short.upper():
+                        return key
+    # Fall back to most recent plan text
+    if "plan" in df.columns and "term_code" in df.columns:
+        plan_col = df["plan"].dropna().astype(str).str.strip()
+        plan_col = plan_col[plan_col != ""]
+        if not plan_col.empty:
+            sorted_idx = df.loc[plan_col.index].sort_values(
+                "term_code", key=lambda c: c.map(_term_sort_key)
+            ).index
+            latest_plan = plan_col.loc[sorted_idx[-1]].lower()
+            for key, info in reg.items():
+                for pat in info.get("plan_patterns", []):
+                    if pat.lower() in latest_plan:
+                        return key
+    # Final fallback: any match in plan text
     plan_vals = df.get("plan", pd.Series(dtype=str)).dropna().astype(str).str.lower()
     for key, info in reg.items():
         for pat in info.get("plan_patterns", []):
