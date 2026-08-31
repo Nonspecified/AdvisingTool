@@ -12,5 +12,19 @@
     "has_te": true,
     "variants": ["pre2025", "2025plus"],
     "variant_cutoff_year": 2025
+  },
+  "EET": {
+    "plan_patterns": ["electronics engineering technology", "electronics eng tech", "eet"],
+    "plan_short_values": ["EET"],
+    "has_te": true,
+    "variants": ["2026"],
+    "variant_cutoff_year": 2026
+  },
+  "MET": {
+    "plan_patterns": ["mechanical engineering technology", "mechanical eng tech", "met"],
+    "plan_short_values": ["MET"],
+    "has_te": true,
+    "variants": ["2026"],
+    "variant_cutoff_year": 2026
   }
 }

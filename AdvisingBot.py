@@ -909,11 +909,11 @@ def _best_attempts(tx: pd.DataFrame) -> pd.DataFrame:
 
 
 def _pick_curriculum_csv(track: str):
-    """Find curriculum_{track}.csv using registry naming convention."""
+    """Find a curriculum CSV in the dedicated curricula folder."""
     if not track or track == "UNKNOWN":
         return None
     fname = f"curriculum_{track}.csv"
-    p = _resource_path(fname)
+    p = _resource_path(f"curricula/{fname}")
     return p if p.exists() else None
 
 
@@ -944,7 +944,7 @@ def _choose_bucket_assignment(candidates_df: pd.DataFrame, allowed_ids: set, use
 
 def _te_catalog_path(major: str):
     fname = f"{major}_TE.csv"
-    p = _resource_path(fname)
+    p = _resource_path(f"curricula/{fname}")
     return p if p.exists() else None
 
 

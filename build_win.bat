@@ -17,11 +17,11 @@ if exist AHelectives.csv          set DATA_FLAGS=!DATA_FLAGS! --add-data "AHelec
 if exist SSelectives.csv          set DATA_FLAGS=!DATA_FLAGS! --add-data "SSelectives.csv;."
 if exist TE_Rules.csv             set DATA_FLAGS=!DATA_FLAGS! --add-data "TE_Rules.csv;."
 
-for %%f in (curriculum_*.csv) do (
-    set DATA_FLAGS=!DATA_FLAGS! --add-data "%%f;."
+for %%f in (curricula\curriculum_*.csv) do (
+    set DATA_FLAGS=!DATA_FLAGS! --add-data "%%f;curricula"
 )
-for %%f in (*_TE.csv) do (
-    set DATA_FLAGS=!DATA_FLAGS! --add-data "%%f;."
+for %%f in (curricula\*_TE.csv) do (
+    set DATA_FLAGS=!DATA_FLAGS! --add-data "%%f;curricula"
 )
 for %%f in (minor_*.csv) do (
     set DATA_FLAGS=!DATA_FLAGS! --add-data "%%f;."

@@ -1,0 +1,18 @@
+course_id,course_name,credits,prereq,notes,category,source_sheet
+ETEC 2720,INTRODUCTION TO ALTERNATIVE ENERGY,3,,,TechElective,Course Listing-AlphaNumeric
+MTEC 2110,LABVIEW PROGRAMMING WITH ENGINEERING APPLICATIONS,3,,,TechElective,Course Listing-AlphaNumeric
+ETEC 3450,PROGRAMMABLE LOGIC CONTROLLERS AND LABORATORY I,3,,,TechElective,Course Listing-AlphaNumeric
+ETEC 3530,DIGITAL ELECTRONICS,3,,,TechElective,Course Listing-AlphaNumeric
+ETEC 3680,DATA CONVERSIONS AND LAB,3,,,TechElective,Course Listing-AlphaNumeric
+ETEC 4030,FOUNDATIONS OF MICROWAVE DESIGN,3,,,TechElective,Course Listing-AlphaNumeric
+ETEC 4220,GPS: PRINCIPLES AND APPLICATIONS,3,,,TechElective,Course Listing-AlphaNumeric
+ETEC 4270,DIGITAL SIGNAL PROCESSING,3,,,TechElective,Course Listing-AlphaNumeric
+ETEC 4590,POWER CONVERSION DESIGN I,3,,,TechElective,Course Listing-AlphaNumeric
+ETEC 4600,POWER CONVERSION II,3,,,TechElective,Course Listing-AlphaNumeric
+ETEC 4690,CONTROL SYSTEMS II,3,,,TechElective,Course Listing-AlphaNumeric
+ETEC 4770,ELECTROMAGNETICS THEORY II,3,,,TechElective,Course Listing-AlphaNumeric
+ETEC 4850,FUNDAMENTALS OF COMMUNICATION SYSTEMS,3,,,TechElective,Course Listing-AlphaNumeric
+ETEC 4870,ANALOG FILTER DESIGN,3,,,TechElective,Course Listing-AlphaNumeric
+ETEC 4960,RADAR SYSTEMS,3,,,TechElective,Course Listing-AlphaNumeric
+INFO 2670,C PROGRAMMING,3,,,TechElective,Course Listing-AlphaNumeric
+MATH 2310,CALCULUS III,4,,,TechElective,Course Listing-AlphaNumeric

@@ -1,0 +1,9 @@
+course_id,course_name,credits,prereq,notes,category,source_sheet
+INFO 2670,C PROGRAMMING,3,,,TechElective,Course Listing-AlphaNumeric
+MTEC 2110,LABVIEW PROGRAMMING WITH ENGINEERING APPLICATIONS,3,,,TechElective,Course Listing-AlphaNumeric
+MTEC 2000,AUTOCAD Rf,3,,,TechElective,Course Listing-AlphaNumeric
+MTEC 3530,FORENSIC ENGINEERING,3,,,TechElective,Course Listing-AlphaNumeric
+MTEC 4160,STATISTICAL QUALITY CONTROL,3,MTEC 2620,,TechElective,Course Listing-AlphaNumeric
+MTEC 4440,MECHANICAL VIBRATIONS,3,MTEC 2210,,TechElective,Course Listing-AlphaNumeric
+MTEC 4800,COMPUTER AIDED DESIGN - AUTODESK INVENTOR,3,,,TechElective,Course Listing-AlphaNumeric
+MTEC 4840,INTRODUCTION TO PRO-E,3,,,TechElective,Course Listing-AlphaNumeric

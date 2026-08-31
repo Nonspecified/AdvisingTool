@@ -22,10 +22,10 @@ DATA_FLAGS=""
 for f in curricula_registry.json AHelectives.csv SSelectives.csv TE_Rules.csv; do
     [ -f "$f" ] && DATA_FLAGS="$DATA_FLAGS --add-data $f:."
 done
-for f in curriculum_*.csv; do
+for f in curricula/curriculum_*.csv; do
     [ -f "$f" ] && DATA_FLAGS="$DATA_FLAGS --add-data $f:."
 done
-for f in *_TE.csv; do
+for f in curricula/*_TE.csv; do
     [ -f "$f" ] && DATA_FLAGS="$DATA_FLAGS --add-data $f:."
 done
 for f in minor_*.csv; do

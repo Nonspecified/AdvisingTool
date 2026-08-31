@@ -357,6 +357,8 @@ def _inject_chrome(html_content: str, session_id: str) -> str:
     minor_index      = _load_minor_index()
     minor_index_json = json.dumps(minor_index)
     applied_json     = json.dumps(applied_codes)
+    track_options_json = json.dumps(_track_options())
+    selected_track = session.get("track_choice", "")
 
     html_content = html_content.replace("__MINOR_SESSION_ID__", session_id)
 
@@ -381,6 +383,9 @@ def _inject_chrome(html_content: str, session_id: str) -> str:
 #arrow-toggle-label input{{accent-color:#a0c4ff;cursor:pointer;margin:0}}
 /* export dropdown */
 #export-wrap{{position:relative}}
+#track-wrap{{display:flex;align-items:center}}
+#track-choice{{max-width:142px;padding:5px 7px;background:#0d1b2e;color:#a0c4ff;
+  border:1px solid #1565c0;border-radius:6px;font-size:.72rem;font-family:inherit}}
 #export-dropdown{{display:none;position:absolute;top:calc(100% + 5px);right:0;
   background:#0d1b2e;border:1px solid #1565c0;border-radius:6px;padding:4px 0;
   z-index:10002;min-width:180px;box-shadow:0 4px 18px rgba(0,0,0,.65)}}
@@ -524,6 +529,12 @@ body{{padding-top:44px!important}}
         <a class="export-item" href="{download_html_url}" download>Download CPR (HTML)</a>
       </div>
     </div>
+    <div id="track-wrap" title="Choose the curriculum used for this report">
+      <select id="track-choice" aria-label="Major curriculum">
+        <option value="">Auto-detect major</option>
+        {''.join(f'<option value="{value}"' + (' selected' if value == selected_track else '') + f'>{label}</option>' for value, label in _track_options())}
+      </select>
+    </div>
     <button class="nav-btn" id="open-minor-btn" type="button">Minors (beta)</button>
     <button class="nav-btn" type="button" onclick="location.href='/'">New Student</button>
     <button id="bug-icon" type="button" title="Report a bug"><svg width="15" height="15" viewBox="0 0 28 28" fill="currentColor" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><path d="M15 2H5a2 2 0 0 0-2 2v20a2 2 0 0 0 2 2h10.5"/><path d="M15 2v6h6" fill="none" stroke="currentColor" stroke-width="1.5"/><rect x="6" y="10" width="6" height="1.8" rx=".9" fill="white" fill-opacity=".55"/><rect x="6" y="13.5" width="8" height="1.8" rx=".9" fill="white" fill-opacity=".55"/><rect x="6" y="17" width="5" height="1.8" rx=".9" fill="white" fill-opacity=".55"/><circle cx="21" cy="17" r="2.5"/><ellipse cx="21" cy="23" rx="4.5" ry="5"/><path d="M16.5 20l-3.5-1.5M16.5 23l-3.5 0M16.5 26l-3.5 1.5M25.5 20l3.5-1.5M25.5 23l3.5 0M25.5 26l3.5 1.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" fill="none"/><ellipse cx="21" cy="23.5" rx="1.2" ry="2.2" fill="white" fill-opacity=".35"/></svg><span>Report Bug</span></button>
@@ -639,6 +650,17 @@ body{{padding-top:44px!important}}
     e.stopPropagation(); expWrap.classList.toggle('open');
   }});
   document.addEventListener('click', function(){{ expWrap.classList.remove('open'); }});
+
+  /* ── Curriculum override ── */
+  var trackChoice = document.getElementById('track-choice');
+  if(trackChoice) trackChoice.addEventListener('change', function(){{
+    trackChoice.disabled = true;
+    var fd = new FormData(); fd.append('session', SESSION); fd.append('track_choice', trackChoice.value);
+    fetch('/change-track', {{method:'POST', body:fd}})
+      .then(function(r){{ if(!r.ok) throw new Error('Unable to change curriculum'); return r.text(); }})
+      .then(function(html){{ document.open(); document.write(html); document.close(); }})
+      .catch(function(){{ trackChoice.disabled = false; }});
+  }});
 
   /* ── Bug report modal ── */
   var bugOverlay = document.getElementById('bug-modal-overlay');
@@ -1695,6 +1717,20 @@ def apply_minor():
     return _inject_chrome(html_content, session_id), 200, {"Content-Type": "text/html; charset=utf-8"}
 
 
+@app.route("/change-track", methods=["POST"])
+def change_track():
+    session_id = request.form.get("session", "")
+    track_choice = _normalize_track_choice(request.form.get("track_choice", "").strip())
+    if not session_id or session_id not in _sessions:
+        return redirect("/")
+    _sessions[session_id]["track_choice"] = track_choice
+    try:
+        html_content = _build_session_from_csv(session_id)
+    except FileNotFoundError as exc:
+        return str(exc), 400
+    return _inject_chrome(html_content, session_id), 200, {"Content-Type": "text/html; charset=utf-8"}
+
+
 @app.route("/schedule/search", methods=["POST"])
 def schedule_search():
     payload = request.get_json(silent=True) or {}
@@ -1852,4 +1888,5 @@ def download_csv():
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port, debug=False)
+    host = os.environ.get("HOST", "127.0.0.1")
+    app.run(host=host, port=port, debug=False)
