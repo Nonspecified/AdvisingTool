@@ -213,6 +213,10 @@ def _classify_status(grade, points, is_latest_term: bool) -> str:
 
 def _infer_plan_short(plan: str) -> str:
     p = plan.lower() if plan else ""
+    if "electronics engineering technology" in p or "electronics eng tech" in p:
+        return "EET"
+    if "mechanical engineering technology" in p or "mechanical eng tech" in p:
+        return "MET"
     if "industrial engineering" in p:
         return "IE"
     if "mechanical engineering" in p:
@@ -477,7 +481,11 @@ def parse_advising_report_text(text: str, out_path: Path) -> Path:
 
     # ── detect major from section headers ─────────────────────────────────────
     text_lower = text.lower()
-    if "mechanical engineering" in text_lower:
+    if "electronics engineering technology" in text_lower or "electronics eng tech" in text_lower:
+        plan, plan_short = "Electronics Engineering Technology", "EET"
+    elif "mechanical engineering technology" in text_lower or "mechanical eng tech" in text_lower:
+        plan, plan_short = "Mechanical Engineering Technology", "MET"
+    elif "mechanical engineering" in text_lower:
         plan, plan_short = "Mechanical Engineering BSE", "ME"
     elif "industrial engineering" in text_lower:
         plan, plan_short = "Industrial Engineering BSE", "IE"
